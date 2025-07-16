@@ -1,0 +1,12 @@
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="8" cy="8" r="7" fill="#1a73e8"/>
+  
+  <!-- Simplified shield -->
+  <path d="M8 2 L5 3 L5 7 Q5 10 8 12 Q11 10 11 7 L11 3 Z" fill="#ffffff"/>
+  
+  <!-- Simple tab lines -->
+  <rect x="6" y="5" width="4" height="1" fill="#1a73e8"/>
+  <rect x="6" y="6.5" width="3" height="1" fill="#1a73e8"/>
+  <rect x="6" y="8" width="3.5" height="1" fill="#1a73e8"/>
+</svg>
