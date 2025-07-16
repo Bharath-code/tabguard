@@ -31,7 +31,14 @@ const PopupApp: React.FC = () => {
   };
 
   const openOptionsPage = () => {
-    chrome.runtime.openOptionsPage();
+    try {
+      console.log('Opening options page...');
+      chrome.runtime.openOptionsPage();
+    } catch (error) {
+      console.error('Failed to open options page:', error);
+      // Fallback: try to open options page manually
+      chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+    }
   };
 
   if (loading) {

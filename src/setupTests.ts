@@ -1,7 +1,7 @@
 // Jest setup file for Chrome extension testing
 
 // Mock Chrome APIs for testing
-const mockChrome = {
+const globalMockChrome = {
   runtime: {
     onStartup: {
       addListener: jest.fn()
@@ -35,7 +35,7 @@ const mockChrome = {
 };
 
 // Make chrome available globally in tests
-(global as any).chrome = mockChrome;
+(global as any).chrome = globalMockChrome;
 
 // Mock console methods to reduce test noise
 global.console = {

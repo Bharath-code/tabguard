@@ -2,6 +2,55 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { UserConfig } from '@/shared/types';
 
+// Error Boundary Component
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Options page error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '40px', textAlign: 'center' }}>
+          <h2 style={{ color: '#d93025', marginBottom: '16px' }}>
+            Something went wrong
+          </h2>
+          <p style={{ marginBottom: '16px' }}>
+            The settings page encountered an error. Please try refreshing the page.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#1a73e8',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Refresh Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const OptionsApp: React.FC = () => {
   const [config, setConfig] = useState<UserConfig>({
     tabLimit: 10,
@@ -14,6 +63,7 @@ const OptionsApp: React.FC = () => {
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfiguration();
@@ -21,12 +71,14 @@ const OptionsApp: React.FC = () => {
 
   const loadConfiguration = async () => {
     try {
+      setError(null);
       const result = await chrome.storage.sync.get('userConfig');
       if (result.userConfig) {
         setConfig(result.userConfig);
       }
     } catch (error) {
       console.error('Failed to load configuration:', error);
+      setError('Failed to load settings. Please try refreshing the page.');
     } finally {
       setLoading(false);
     }
@@ -52,6 +104,29 @@ const OptionsApp: React.FC = () => {
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
         <div>Loading settings...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div style={{ color: '#d93025', marginBottom: '16px' }}>
+          {error}
+        </div>
+        <button
+          onClick={loadConfiguration}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#1a73e8',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -107,7 +182,7 @@ const OptionsApp: React.FC = () => {
               />
               Enable automatic closing of inactive tabs
             </label>
-            
+
             {config.autoCloseEnabled && (
               <div style={{ marginLeft: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <label htmlFor="autoCloseDelay">Close tabs inactive for:</label>
@@ -170,9 +245,9 @@ const OptionsApp: React.FC = () => {
         </section>
 
         {/* Premium Features Placeholder */}
-        <section style={{ 
-          padding: '16px', 
-          backgroundColor: '#f8f9fa', 
+        <section style={{
+          padding: '16px',
+          backgroundColor: '#f8f9fa',
           borderRadius: '8px',
           border: '1px solid #e8eaed'
         }}>
@@ -197,9 +272,9 @@ const OptionsApp: React.FC = () => {
       </div>
 
       {/* Save Button */}
-      <div style={{ 
-        marginTop: '32px', 
-        paddingTop: '16px', 
+      <div style={{
+        marginTop: '32px',
+        paddingTop: '16px',
         borderTop: '1px solid #e8eaed',
         textAlign: 'right'
       }}>
@@ -227,5 +302,11 @@ const OptionsApp: React.FC = () => {
 const container = document.getElementById('root');
 if (container) {
   const root = createRoot(container);
-  root.render(<OptionsApp />);
+  root.render(
+    <ErrorBoundary>
+      <OptionsApp />
+    </ErrorBoundary>
+  );
+} else {
+  console.error('Failed to find root container for options page');
 }

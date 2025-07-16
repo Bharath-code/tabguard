@@ -8,14 +8,14 @@
   - _Requirements: 1.1, 4.1_
 
 - [ ] 2. Implement core tab management foundation
-  - [ ] 2.1 Create background service worker with tab event listeners
+  - [x] 2.1 Create background service worker with tab event listeners
     - Write background.ts with chrome.tabs API event handlers
     - Implement tab creation, removal, and update event processing
     - Create basic tab counting functionality across all windows
     - Add error handling for Chrome API failures
     - _Requirements: 1.1, 1.2, 1.3_
 
-  - [ ] 2.2 Build tab limit enforcement engine
+  - [x] 2.2 Build tab limit enforcement engine
     - Implement TabManager class with limit validation logic
     - Create tab blocking mechanism when limit is reached
     - Add notification system for limit violations
