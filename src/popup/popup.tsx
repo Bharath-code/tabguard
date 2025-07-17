@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { UserConfig, TabSuggestion } from '@/shared/types';
 import TabCounter from './components/TabCounter';
 import QuickActions from './components/QuickActions';
+import TabSuggestions from './components/TabSuggestions';
 import './popup.css';
 
 // Define CSS variables for Tailwind classes that might not be processed
@@ -26,6 +27,7 @@ const PopupApp: React.FC = () => {
   const [tabSuggestions, setTabSuggestions] = useState<TabSuggestion[]>([]);
   const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('auto');
   const [error, setError] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
 
   useEffect(() => {
     loadInitialData();
@@ -104,14 +106,29 @@ const PopupApp: React.FC = () => {
     }
   };
 
-  const handleCloseSuggested = async () => {
-    if (tabSuggestions.length === 0) return;
+  const handleCloseSuggested = () => {
+    // Show the suggestions modal instead of closing tabs directly
+    setShowSuggestions(true);
+  };
+  
+  const handleCloseSuggestedTabs = async (tabIds: number[]) => {
+    if (tabIds.length === 0) return;
     
     try {
-      // Send message to background script to close suggested tabs
+      // Send message to background script to close selected tabs
       await chrome.runtime.sendMessage({ 
         action: 'closeSuggestedTabs',
-        tabIds: tabSuggestions.map(tab => tab.tabId)
+        tabIds: tabIds
+      });
+      
+      // Hide the suggestions modal
+      setShowSuggestions(false);
+      
+      // Show notification
+      chrome.runtime.sendMessage({ 
+        action: 'showNotification',
+        title: 'Tabs Closed',
+        message: `Closed ${tabIds.length} ${tabIds.length === 1 ? 'tab' : 'tabs'} based on your selection`
       });
       
       // Refresh data after closing tabs
@@ -120,6 +137,10 @@ const PopupApp: React.FC = () => {
       console.error('Failed to close suggested tabs:', error);
       setError('Failed to close suggested tabs.');
     }
+  };
+  
+  const handleCancelSuggestions = () => {
+    setShowSuggestions(false);
   };
 
   const handleCloseAllDuplicates = async () => {
@@ -371,6 +392,13 @@ const PopupApp: React.FC = () => {
           </span>
         </div>
       </footer>
+      
+      {/* Tab Suggestions Modal */}
+      <TabSuggestions 
+        isOpen={showSuggestions}
+        onClose={handleCloseSuggestedTabs}
+        onCancel={handleCancelSuggestions}
+      />
     </div>
   );
 };

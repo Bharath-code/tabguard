@@ -4,6 +4,7 @@ import { UserConfig } from '@/shared/types';
 import TabLimitSettings from './TabLimitSettings';
 import ThemeSelector from './ThemeSelector';
 import NotificationSettings from './NotificationSettings';
+import AutoCloseSettings from './AutoCloseSettings';
 
 interface SettingsPanelProps {
   className?: string;
@@ -266,71 +267,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </svg>
               </button>
               
-              <div className={`px-4 pb-4 ${activeSection === 'autoClose' ? 'block' : 'hidden'}`}>
+              <div className={`${activeSection === 'autoClose' ? 'block' : 'hidden'}`}>
                 {isPremium ? (
-                  <div className="flex flex-col space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Auto-close inactive tabs
-                      </label>
-                      <div className="relative inline-block w-10 mr-2 align-middle select-none">
-                        <input 
-                          type="checkbox" 
-                          id="auto-close-toggle" 
-                          checked={config.autoCloseEnabled}
-                          onChange={() => {
-                            if (config) {
-                              const updatedConfig = { 
-                                ...config, 
-                                autoCloseEnabled: !config.autoCloseEnabled 
-                              };
-                              setConfig(updatedConfig);
-                              if (onSettingsChange) {
-                                onSettingsChange({ autoCloseEnabled: !config.autoCloseEnabled });
-                              }
-                            }
-                          }}
-                          className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
-                        />
-                        <label 
-                          htmlFor="auto-close-toggle" 
-                          className="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 dark:bg-gray-700 cursor-pointer"
-                        ></label>
-                      </div>
-                    </div>
-                    
-                    <div className={`${config.autoCloseEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">
-                        Close tabs after inactivity (minutes)
-                      </label>
-                      <input
-                        type="range"
-                        min="5"
-                        max="120"
-                        step="5"
-                        value={config.autoCloseDelay}
-                        onChange={(e) => {
-                          if (config) {
-                            const newValue = parseInt(e.target.value);
-                            const updatedConfig = { ...config, autoCloseDelay: newValue };
-                            setConfig(updatedConfig);
-                            if (onSettingsChange) {
-                              onSettingsChange({ autoCloseDelay: newValue });
-                            }
-                          }
-                        }}
-                        className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                        disabled={!config.autoCloseEnabled}
-                      />
-                      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        <span>5m</span>
-                        <span>{config.autoCloseDelay}m</span>
-                        <span>120m</span>
-                      </div>
-                    </div>
-                  </div>
+                  <AutoCloseSettings 
+                    onClose={() => toggleSection('autoClose')}
+                  />
                 ) : (
-                  <div className="text-center py-4">
+                  <div className="text-center py-4 px-4">
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                       Upgrade to premium to automatically close inactive tabs and save system resources.
                     </p>

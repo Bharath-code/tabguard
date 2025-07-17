@@ -1,15 +1,20 @@
 // Background service worker for TabGuard Pro
 // Main entry point for tab management and extension coordination
 
-import { UserConfig } from '../shared/types';
 import { TabManager } from './TabManager';
 import { StorageManager } from '../shared/StorageManager';
+import { TabActivityTracker } from './TabActivityTracker';
+import { TabSuggestionEngine } from './TabSuggestionEngine';
+import { AutoCloseManager } from './AutoCloseManager';
 
 console.log('TabGuard Pro background service worker loaded');
 
-// Initialize TabManager and StorageManager instances
+// Initialize TabManager, TabActivityTracker, TabSuggestionEngine and StorageManager instances
 const tabManager = new TabManager();
+const tabActivityTracker = new TabActivityTracker();
+const tabSuggestionEngine = new TabSuggestionEngine(tabActivityTracker);
 const storageManager = new StorageManager();
+const autoCloseManager = new AutoCloseManager(tabActivityTracker, tabSuggestionEngine);
 
 interface TabCountResult {
     totalTabs: number;
@@ -80,6 +85,13 @@ async function initializeExtension(): Promise<void> {
 
         // Initialize tab count and metadata
         await initializeTabTracking();
+        
+        // Initialize AutoCloseManager with user configuration
+        const { userConfig } = await chrome.storage.sync.get('userConfig');
+        if (userConfig) {
+            await autoCloseManager.initialize(userConfig);
+            console.log('AutoCloseManager initialized successfully');
+        }
 
         console.log('Extension initialized successfully');
     } catch (error) {
@@ -88,12 +100,19 @@ async function initializeExtension(): Promise<void> {
     }
 }
 
-// Initialize tab tracking using TabManager
+// Initialize tab tracking using TabManager and TabActivityTracker
 async function initializeTabTracking(): Promise<void> {
     try {
+        // Initialize TabManager
         await tabManager.initializeFromExistingTabs();
         const currentCount = await tabManager.getCurrentTabCount();
+
+        // Initialize TabActivityTracker
+        await tabActivityTracker.initializeFromExistingTabs();
+        const activitySummary = tabActivityTracker.getActivitySummary();
+
         console.log(`Initialized tab tracking: ${currentCount} tabs`);
+        console.log(`Tab activity tracking initialized: ${activitySummary.totalTabs} tabs, ${activitySummary.activeTabs} active`);
     } catch (error) {
         console.error('Failed to initialize tab tracking:', error);
         logError('TAB_TRACKING_INIT', error);
@@ -135,6 +154,9 @@ async function handleTabCreated(tab: chrome.tabs.Tab): Promise<void> {
         // Add tab to TabManager
         tabManager.addTab(tab);
 
+        // Add tab to TabActivityTracker
+        tabActivityTracker.trackTab(tab);
+
         // Enforce tab limit using TabManager
         const limitResult = await tabManager.enforceTabLimit();
 
@@ -156,6 +178,9 @@ async function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemove
         // Remove tab from TabManager (only if window is not closing to avoid double counting)
         if (!removeInfo.isWindowClosing) {
             tabManager.removeTab(tabId);
+
+            // Also remove from TabActivityTracker
+            tabActivityTracker.removeTab(tabId);
         }
 
         const currentCount = await tabManager.getCurrentTabCount();
@@ -181,6 +206,9 @@ async function handleTabUpdated(tabId: number, changeInfo: chrome.tabs.TabChange
             title: tab.title || '',
             isActive: tab.active || false
         });
+
+        // Update tab in TabActivityTracker
+        tabActivityTracker.updateTab(tabId, changeInfo, tab);
     } catch (error) {
         console.error('Error in handleTabUpdated:', error);
         logError('HANDLE_TAB_UPDATED', error, { tabId, changeInfo });
@@ -193,6 +221,9 @@ async function handleTabActivated(activeInfo: chrome.tabs.TabActiveInfo): Promis
 
         // Update tab activity using TabManager
         tabManager.setActiveTab(activeInfo.tabId, activeInfo.windowId);
+
+        // Update tab activity in TabActivityTracker
+        tabActivityTracker.activateTab(activeInfo);
     } catch (error) {
         console.error('Error in handleTabActivated:', error);
         logError('HANDLE_TAB_ACTIVATED', error, activeInfo);
@@ -205,6 +236,9 @@ async function handleWindowRemoved(windowId: number): Promise<void> {
 
         // Remove all tabs from this window using TabManager
         tabManager.removeWindow(windowId);
+
+        // Also remove from TabActivityTracker
+        tabActivityTracker.removeWindow(windowId);
 
         const currentCount = await tabManager.getCurrentTabCount();
         console.log(`Updated tab count after window closure: ${currentCount}`);
@@ -219,8 +253,20 @@ export function getTabManager(): TabManager {
     return tabManager;
 }
 
+export function getTabActivityTracker(): TabActivityTracker {
+    return tabActivityTracker;
+}
+
+export function getTabSuggestionEngine(): TabSuggestionEngine {
+    return tabSuggestionEngine;
+}
+
 export function getStorageManager(): StorageManager {
     return storageManager;
+}
+
+export function getAutoCloseManager(): AutoCloseManager {
+    return autoCloseManager;
 }
 
 // Error logging utility
@@ -250,7 +296,7 @@ async function logError(context: string, error: any, metadata?: any): Promise<vo
 }
 
 // Message handlers for UI interactions
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     (async () => {
         try {
             switch (message.action) {
@@ -258,63 +304,73 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     await storageManager.createBackup();
                     sendResponse(true);
                     break;
-                    
+
                 case 'restoreFromBackup':
                     const restored = await storageManager.restoreFromBackup();
                     sendResponse(restored);
                     break;
-                    
+
                 case 'exportConfig':
                     const jsonData = await storageManager.exportConfig();
                     sendResponse(jsonData);
                     break;
-                    
+
                 case 'importConfig':
                     const importResult = await storageManager.importConfig(message.data);
                     sendResponse(importResult);
                     break;
-                    
+
                 case 'resetToDefaults':
                     await storageManager.resetToDefaults();
                     sendResponse(true);
                     break;
-                    
+
                 case 'getStorageStats':
                     const stats = await storageManager.getStorageStats();
                     sendResponse(stats);
                     break;
-                    
+
                 case 'getBackups':
                     const backups = await storageManager.getBackups();
                     sendResponse(backups);
                     break;
-                
+
                 case 'getSuggestedTabs':
                     try {
-                        // Get tabs that might be good candidates for closing
-                        const allTabs = await chrome.tabs.query({});
+                        // Use TabSuggestionEngine to get intelligent tab suggestions
+                        const criteria = {
+                            maxSuggestions: message.maxSuggestions || 5,
+                            minInactivityMinutes: message.minInactivityMinutes || 30,
+                            includePinnedTabs: message.includePinnedTabs || false,
+                            prioritizeMemoryUsage: message.prioritizeMemoryUsage !== false,
+                            prioritizeLowProductivity: message.prioritizeLowProductivity !== false,
+                            excludeWorkTabs: message.excludeWorkTabs !== false
+                        };
                         
-                        // Simple algorithm: suggest tabs that haven't been accessed recently
-                        // In a real implementation, this would use more sophisticated metrics
-                        const suggestions = allTabs
-                            .filter(tab => tab.id && tab.url && !tab.active)
-                            .slice(0, 5)  // Limit to 5 suggestions
-                            .map(tab => ({
-                                tabId: tab.id as number,
-                                title: tab.title || 'Untitled',
-                                url: tab.url || '',
-                                lastAccessed: new Date(),
-                                memoryUsage: Math.floor(Math.random() * 100), // Mock data
-                                productivityScore: Math.random() * 10 // Mock data
-                            }));
+                        const scoredSuggestions = await tabSuggestionEngine.getSuggestions(criteria);
                         
+                        // Format suggestions for UI display
+                        const suggestions = scoredSuggestions.map(suggestion => ({
+                            tabId: suggestion.tabId,
+                            title: suggestion.title,
+                            url: suggestion.url,
+                            lastAccessed: suggestion.lastAccessed,
+                            memoryUsage: suggestion.memoryUsage,
+                            productivityScore: suggestion.productivityScore,
+                            closureScore: suggestion.closureScore,
+                            formattedLastAccessed: TabSuggestionEngine.formatTimeSinceLastAccess(suggestion.lastAccessed),
+                            formattedMemoryUsage: TabSuggestionEngine.formatMemoryUsage(suggestion.memoryUsage),
+                            category: suggestion.category,
+                            isPinned: suggestion.isPinned
+                        }));
+
                         sendResponse({ suggestions });
                     } catch (error) {
                         console.error('Error getting suggested tabs:', error);
                         sendResponse({ suggestions: [] });
                     }
                     break;
-                
+
                 case 'closeSuggestedTabs':
                     try {
                         if (message.tabIds && Array.isArray(message.tabIds)) {
@@ -328,24 +384,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                
+
                 case 'closeInactiveTabs':
                     try {
-                        // Get all tabs
-                        const tabs = await chrome.tabs.query({});
-                        
-                        // Filter for inactive tabs (not currently active)
-                        const inactiveTabs = tabs.filter(tab => !tab.active && tab.id);
-                        
-                        // In a real implementation, we would check last access time
-                        // For now, just close a subset of inactive tabs
-                        const tabsToClose = inactiveTabs
-                            .slice(0, Math.min(3, inactiveTabs.length))
-                            .map(tab => tab.id as number);
-                        
+                        // Use TabActivityTracker to get inactive tabs based on actual usage data
+                        const inactiveTabsData = tabActivityTracker.getInactiveTabs(message.thresholdMinutes);
+
+                        // Get tab IDs to close
+                        const tabsToClose = inactiveTabsData
+                            .slice(0, message.maxTabs || 3) // Limit to specified number or default to 3
+                            .map(tab => tab.tabId);
+
                         if (tabsToClose.length > 0) {
                             await chrome.tabs.remove(tabsToClose);
-                            sendResponse({ success: true, closed: tabsToClose.length });
+                            sendResponse({
+                                success: true,
+                                closed: tabsToClose.length,
+                                tabsData: inactiveTabsData.slice(0, tabsToClose.length)
+                            });
                         } else {
                             sendResponse({ success: false, message: 'No inactive tabs to close' });
                         }
@@ -354,7 +410,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                
+
                 case 'showNotification':
                     try {
                         console.log('Showing notification:', message);
@@ -369,9 +425,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         }, (notificationId) => {
                             if (chrome.runtime.lastError) {
                                 console.error('Notification creation error:', chrome.runtime.lastError);
-                                sendResponse({ 
-                                    success: false, 
-                                    error: chrome.runtime.lastError.message 
+                                sendResponse({
+                                    success: false,
+                                    error: chrome.runtime.lastError.message
                                 });
                             } else {
                                 console.log('Notification created with ID:', notificationId);
@@ -383,8 +439,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     return true; // Important: return true to indicate we'll send response asynchronously
-                    break;
-                
+
                 case 'updateConfig':
                     try {
                         if (message.config) {
@@ -405,7 +460,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                
+
                 case 'getTabCount':
                     try {
                         const count = await tabManager.getCurrentTabCount();
@@ -415,7 +470,147 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         sendResponse({ count: 0, error: String(error) });
                     }
                     break;
+
+                case 'getTabActivitySummary':
+                    try {
+                        const summary = tabActivityTracker.getActivitySummary();
+                        sendResponse({ summary });
+                    } catch (error) {
+                        console.error('Error getting tab activity summary:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getTabActivityOptions':
+                    try {
+                        const options = tabActivityTracker.getOptions();
+                        sendResponse({ options });
+                    } catch (error) {
+                        console.error('Error getting tab activity options:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'updateTabActivityOptions':
+                    try {
+                        if (message.options) {
+                            tabActivityTracker.updateOptions(message.options);
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'No options provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error updating tab activity options:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
                     
+                // Auto-close functionality message handlers
+                case 'getAutoCloseOptions':
+                    try {
+                        const options = autoCloseManager.getOptions();
+                        sendResponse({ options });
+                    } catch (error) {
+                        console.error('Error getting auto-close options:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'updateAutoCloseOptions':
+                    try {
+                        if (message.options) {
+                            autoCloseManager.updateOptions(message.options);
+                            
+                            // Also update user config in storage
+                            const { userConfig } = await chrome.storage.sync.get('userConfig');
+                            if (userConfig) {
+                                const updatedConfig = { 
+                                    ...userConfig, 
+                                    autoCloseEnabled: message.options.enabled !== undefined ? message.options.enabled : userConfig.autoCloseEnabled,
+                                    autoCloseDelay: message.options.inactivityThreshold !== undefined ? message.options.inactivityThreshold : userConfig.autoCloseDelay
+                                };
+                                await chrome.storage.sync.set({ userConfig: updatedConfig });
+                                tabManager.updateConfig(updatedConfig);
+                            }
+                            
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'No options provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error updating auto-close options:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'getWhitelist':
+                    try {
+                        const whitelist = autoCloseManager.getWhitelist();
+                        sendResponse({ whitelist });
+                    } catch (error) {
+                        console.error('Error getting whitelist:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'addToWhitelist':
+                    try {
+                        if (message.entry) {
+                            const success = await autoCloseManager.addToWhitelist(message.entry);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No whitelist entry provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error adding to whitelist:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'removeFromWhitelist':
+                    try {
+                        if (message.type && message.value) {
+                            const success = await autoCloseManager.removeFromWhitelist(message.type, message.value);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'Missing whitelist entry type or value' });
+                        }
+                    } catch (error) {
+                        console.error('Error removing from whitelist:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'getClosedTabs':
+                    try {
+                        const closedTabs = autoCloseManager.getClosedTabs();
+                        sendResponse({ closedTabs });
+                    } catch (error) {
+                        console.error('Error getting closed tabs:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'undoLastClosure':
+                    try {
+                        const success = await autoCloseManager.undoLastClosure();
+                        sendResponse({ success });
+                    } catch (error) {
+                        console.error('Error undoing last closure:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'cancelPendingClosures':
+                    try {
+                        autoCloseManager.cancelPendingClosures();
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Error cancelling pending closures:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
                 default:
                     sendResponse({ error: 'Unknown action' });
             }
@@ -424,7 +619,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ error: String(error) });
         }
     })();
-    
+
     // Return true to indicate we will send a response asynchronously
     return true;
 });
@@ -439,6 +634,9 @@ if (typeof module !== 'undefined' && module.exports) {
         handleTabUpdated,
         handleTabActivated,
         handleWindowRemoved,
-        getTabManager
+        getTabManager,
+        getTabActivityTracker,
+        getTabSuggestionEngine,
+        getAutoCloseManager
     };
 }

@@ -52,28 +52,28 @@
     - _Requirements: 5.1, 5.2, 5.5_
 
 - [ ] 4. Develop smart tab management features
-  - [ ] 4.1 Create tab activity tracking system
+  - [x] 4.1 Create tab activity tracking system
     - Implement TabActivityTracker to monitor tab usage patterns
     - Track last accessed time, active duration, and memory usage
     - Create data structures for tab metadata storage
     - Add privacy-compliant data collection mechanisms
     - _Requirements: 2.1, 2.4, 9.1_
 
-  - [ ] 4.2 Build intelligent tab closure suggestions
+  - [x] 4.2 Build intelligent tab closure suggestions
     - Implement algorithm to identify least active tabs
     - Create TabSuggestion interface with scoring system
     - Build UI component to display closure recommendations
     - Add user confirmation flow for suggested closures
     - _Requirements: 2.1, 2.2, 2.3_
 
-  - [ ] 4.3 Implement auto-close functionality
+  - [x] 4.3 Implement auto-close functionality
     - Create configurable auto-close timer system
     - Build whitelist mechanism for protected tabs
     - Implement user notification before auto-closure
     - Add manual override and undo capabilities
     - _Requirements: 2.5, 5.3_
 
-- [ ] 5. Develop advanced rule-based tab management
+- [-] 5. Develop advanced rule-based tab management
   - [ ] 5.1 Create rule engine foundation
     - Implement TabRule data model with condition/action structure
     - Build rule evaluation engine for different condition types
