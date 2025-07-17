@@ -64,7 +64,7 @@ export class TabManager {
             // Reload config to get latest settings
             await this.loadConfiguration();
 
-            const effectiveLimit = limit || this.config?.tabLimit || 10;
+            const effectiveLimit = limit || this.config?.tabLimit || 25;
             const currentCount = await this.getCurrentTabCount();
 
             const result: TabLimitResult = {
@@ -91,7 +91,7 @@ export class TabManager {
             return {
                 allowed: true, // Fail open to avoid breaking user experience
                 currentCount: this.currentTabCount,
-                limit: limit || 10,
+                limit: limit || 25,
                 message: 'Error enforcing tab limit'
             };
         }
@@ -130,7 +130,7 @@ export class TabManager {
      */
     private async showLimitViolationNotification(currentCount: number, limit: number): Promise<void> {
         try {
-            await chrome.notifications.create({
+            chrome.notifications.create({
                 type: 'basic',
                 iconUrl: '/icons/icon48.png',
                 title: 'TabGuard Pro - Tab Limit Exceeded',

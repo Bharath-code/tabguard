@@ -38,7 +38,7 @@ export class StorageManager {
 
   // Default configuration that matches requirements
   private static readonly DEFAULT_CONFIG: UserConfig = {
-    tabLimit: 10, // Requirement 1.5: default limit of 10 tabs
+    tabLimit: 25, // Default limit of 25 tabs
     autoCloseEnabled: false,
     autoCloseDelay: 30,
     theme: 'auto', // Requirement 4.2: theme customization
@@ -54,7 +54,7 @@ export class StorageManager {
   async initialize(): Promise<void> {
     try {
       const existingConfig = await this.getUserConfig();
-      
+
       if (!existingConfig) {
         await this.setUserConfig(StorageManager.DEFAULT_CONFIG);
         await this.setConfigVersion(StorageManager.CURRENT_VERSION);
@@ -76,7 +76,7 @@ export class StorageManager {
     try {
       const result = await chrome.storage.sync.get(StorageManager.CONFIG_KEY);
       const config = result[StorageManager.CONFIG_KEY];
-      
+
       if (!config) {
         return null;
       }
@@ -123,7 +123,7 @@ export class StorageManager {
    * Update specific configuration field
    */
   async updateConfigField<K extends keyof UserConfig>(
-    field: K, 
+    field: K,
     value: UserConfig[K]
   ): Promise<void> {
     try {
@@ -195,14 +195,14 @@ export class StorageManager {
     try {
       const result = await chrome.storage.local.get(StorageManager.BACKUP_KEY);
       const backup = result[StorageManager.BACKUP_KEY];
-      
+
       if (!backup || !backup.config) {
         return false;
       }
 
       await chrome.storage.sync.set({ [StorageManager.CONFIG_KEY]: backup.config });
       await this.setConfigVersion(backup.version || '0.0.0');
-      
+
       console.log('StorageManager: Configuration restored from backup');
       return true;
     } catch (error) {
@@ -536,13 +536,13 @@ export class StorageManager {
     }
 
     if (Array.isArray(config.rules)) {
-      sanitized.rules = config.rules.filter((rule: any) => 
+      sanitized.rules = config.rules.filter((rule: any) =>
         this.validateTabRule(rule, 'rule').length === 0
       );
     }
 
     if (Array.isArray(config.profiles)) {
-      sanitized.profiles = config.profiles.filter((profile: any) => 
+      sanitized.profiles = config.profiles.filter((profile: any) =>
         this.validateUserProfile(profile, 'profile').length === 0
       );
     }
@@ -556,13 +556,13 @@ export class StorageManager {
   private async migrateIfNeeded(): Promise<MigrationResult | null> {
     try {
       const currentVersion = await this.getConfigVersion();
-      
+
       if (currentVersion === StorageManager.CURRENT_VERSION) {
         return null; // No migration needed
       }
 
       console.log(`StorageManager: Migrating from version ${currentVersion} to ${StorageManager.CURRENT_VERSION}`);
-      
+
       const migrationResult: MigrationResult = {
         success: true,
         fromVersion: currentVersion,
@@ -608,17 +608,17 @@ export class StorageManager {
     }
 
     const migratedFields: string[] = [];
-    
+
     // Version-specific migrations
     if (this.compareVersions(fromVersion, '0.9.0') <= 0 && this.compareVersions(toVersion, '1.0.0') >= 0) {
       // Migration from 0.9.0 to 1.0.0
-      
+
       // Example: Add new fields with default values if they don't exist
       if (config.autoCloseDelay === undefined) {
         config.autoCloseDelay = 30;
         migratedFields.push('autoCloseDelay');
       }
-      
+
       // Example: Ensure rules have the correct structure
       if (Array.isArray(config.rules)) {
         config.rules = config.rules.map(rule => {
@@ -631,7 +631,7 @@ export class StorageManager {
             };
             migratedFields.push('rules[].condition');
           }
-          
+
           if (!rule.action) {
             rule.action = {
               type: 'limit_tabs',
@@ -639,12 +639,12 @@ export class StorageManager {
             };
             migratedFields.push('rules[].action');
           }
-          
+
           return rule;
         });
       }
     }
-    
+
     // Validate and sanitize the migrated configuration
     const validationErrors = this.validateConfig(config);
     if (validationErrors.length > 0) {
@@ -658,7 +658,7 @@ export class StorageManager {
       console.log(`StorageManager: Migration completed from ${fromVersion} to ${toVersion}`);
     }
   }
-  
+
   /**
    * Compare two semantic version strings
    * Returns negative if v1 < v2, positive if v1 > v2, 0 if equal
@@ -670,16 +670,16 @@ export class StorageManager {
   private compareVersions(v1: string, v2: string): number {
     const parts1 = v1.split('.').map(Number);
     const parts2 = v2.split('.').map(Number);
-    
+
     for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
       const part1 = i < parts1.length ? parts1[i] : 0;
       const part2 = i < parts2.length ? parts2[i] : 0;
-      
+
       if (part1 !== part2) {
         return part1 - part2;
       }
     }
-    
+
     return 0;
   }
 
@@ -752,29 +752,29 @@ export class StorageManager {
       try {
         importData = JSON.parse(jsonData);
       } catch (error) {
-        return { 
-          success: false, 
-          messages: ['Invalid JSON format'] 
+        return {
+          success: false,
+          messages: ['Invalid JSON format']
         };
       }
 
       // Check if the import data has the expected structure
       if (!importData.config || typeof importData.config !== 'object') {
-        return { 
-          success: false, 
-          messages: ['Import data missing valid configuration object'] 
+        return {
+          success: false,
+          messages: ['Import data missing valid configuration object']
         };
       }
 
       // Validate the configuration
       const validationErrors = this.validateConfig(importData.config);
       if (validationErrors.length > 0) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           messages: [
             'Configuration validation failed:',
             ...validationErrors.map(e => `${e.field}: ${e.message}`)
-          ] 
+          ]
         };
       }
 
@@ -783,20 +783,20 @@ export class StorageManager {
 
       // Apply the imported configuration
       await this.setUserConfig(importData.config);
-      
+
       // Set version if provided, otherwise use current version
       const version = importData.version || StorageManager.CURRENT_VERSION;
       await this.setConfigVersion(version);
 
-      return { 
-        success: true, 
-        messages: ['Configuration imported successfully'] 
+      return {
+        success: true,
+        messages: ['Configuration imported successfully']
       };
     } catch (error) {
       console.error('StorageManager: Failed to import configuration:', error);
-      return { 
-        success: false, 
-        messages: [`Import failed: ${error instanceof Error ? error.message : String(error)}`] 
+      return {
+        success: false,
+        messages: [`Import failed: ${error instanceof Error ? error.message : String(error)}`]
       };
     }
   }
@@ -811,13 +811,13 @@ export class StorageManager {
     try {
       // Create backup before clearing
       await this.createBackup();
-      
+
       // Clear sync storage
       await chrome.storage.sync.clear();
-      
+
       // Reinitialize with defaults
       await this.initialize();
-      
+
       console.log('StorageManager: All data cleared and reinitialized');
     } catch (error) {
       console.error('StorageManager: Failed to clear data:', error);
@@ -834,11 +834,11 @@ export class StorageManager {
     try {
       const result = await chrome.storage.local.get(StorageManager.BACKUP_KEY);
       const backup = result[StorageManager.BACKUP_KEY];
-      
+
       if (!backup) {
         return [];
       }
-      
+
       return [{
         timestamp: backup.timestamp,
         version: backup.version

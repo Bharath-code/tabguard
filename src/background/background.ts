@@ -22,6 +22,13 @@ chrome.runtime.onStartup.addListener(() => {
     initializeExtension();
 });
 
+// Add notification click listener
+chrome.notifications.onClicked.addListener((notificationId) => {
+    console.log('Notification clicked:', notificationId);
+    // Open the extension popup when a notification is clicked
+    chrome.action.openPopup();
+});
+
 // Initialize extension on install
 chrome.runtime.onInstalled.addListener((details) => {
     console.log('TabGuard Pro extension installed/updated:', details.reason);
@@ -280,6 +287,133 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 case 'getBackups':
                     const backups = await storageManager.getBackups();
                     sendResponse(backups);
+                    break;
+                
+                case 'getSuggestedTabs':
+                    try {
+                        // Get tabs that might be good candidates for closing
+                        const allTabs = await chrome.tabs.query({});
+                        
+                        // Simple algorithm: suggest tabs that haven't been accessed recently
+                        // In a real implementation, this would use more sophisticated metrics
+                        const suggestions = allTabs
+                            .filter(tab => tab.id && tab.url && !tab.active)
+                            .slice(0, 5)  // Limit to 5 suggestions
+                            .map(tab => ({
+                                tabId: tab.id as number,
+                                title: tab.title || 'Untitled',
+                                url: tab.url || '',
+                                lastAccessed: new Date(),
+                                memoryUsage: Math.floor(Math.random() * 100), // Mock data
+                                productivityScore: Math.random() * 10 // Mock data
+                            }));
+                        
+                        sendResponse({ suggestions });
+                    } catch (error) {
+                        console.error('Error getting suggested tabs:', error);
+                        sendResponse({ suggestions: [] });
+                    }
+                    break;
+                
+                case 'closeSuggestedTabs':
+                    try {
+                        if (message.tabIds && Array.isArray(message.tabIds)) {
+                            await chrome.tabs.remove(message.tabIds);
+                            sendResponse({ success: true, closed: message.tabIds.length });
+                        } else {
+                            sendResponse({ success: false, error: 'No tab IDs provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error closing suggested tabs:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                
+                case 'closeInactiveTabs':
+                    try {
+                        // Get all tabs
+                        const tabs = await chrome.tabs.query({});
+                        
+                        // Filter for inactive tabs (not currently active)
+                        const inactiveTabs = tabs.filter(tab => !tab.active && tab.id);
+                        
+                        // In a real implementation, we would check last access time
+                        // For now, just close a subset of inactive tabs
+                        const tabsToClose = inactiveTabs
+                            .slice(0, Math.min(3, inactiveTabs.length))
+                            .map(tab => tab.id as number);
+                        
+                        if (tabsToClose.length > 0) {
+                            await chrome.tabs.remove(tabsToClose);
+                            sendResponse({ success: true, closed: tabsToClose.length });
+                        } else {
+                            sendResponse({ success: false, message: 'No inactive tabs to close' });
+                        }
+                    } catch (error) {
+                        console.error('Error closing inactive tabs:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                
+                case 'showNotification':
+                    try {
+                        console.log('Showing notification:', message);
+                        // Create and show notification using Chrome's notifications API
+                        chrome.notifications.create({
+                            type: 'basic',
+                            iconUrl: chrome.runtime.getURL('icons/icon48.png'), // Use getURL for correct path resolution
+                            title: message.title || 'TabGuard Pro',
+                            message: message.message || 'Notification from TabGuard Pro',
+                            priority: 1,
+                            silent: message.silent === true
+                        }, (notificationId) => {
+                            if (chrome.runtime.lastError) {
+                                console.error('Notification creation error:', chrome.runtime.lastError);
+                                sendResponse({ 
+                                    success: false, 
+                                    error: chrome.runtime.lastError.message 
+                                });
+                            } else {
+                                console.log('Notification created with ID:', notificationId);
+                                sendResponse({ success: true, notificationId });
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Error showing notification:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    return true; // Important: return true to indicate we'll send response asynchronously
+                    break;
+                
+                case 'updateConfig':
+                    try {
+                        if (message.config) {
+                            // Get current config
+                            const { userConfig } = await chrome.storage.sync.get('userConfig');
+                            // Update with new values
+                            const updatedConfig = { ...userConfig, ...message.config };
+                            // Save back to storage
+                            await chrome.storage.sync.set({ userConfig: updatedConfig });
+                            // Update TabManager with new config
+                            tabManager.updateConfig(updatedConfig);
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'No config provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error updating config:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                
+                case 'getTabCount':
+                    try {
+                        const count = await tabManager.getCurrentTabCount();
+                        sendResponse({ count });
+                    } catch (error) {
+                        console.error('Error getting tab count:', error);
+                        sendResponse({ count: 0, error: String(error) });
+                    }
                     break;
                     
                 default:

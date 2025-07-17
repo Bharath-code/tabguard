@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { UserConfig } from '@/shared/types';
+import { UserConfig, TabRule, UserProfile } from '@/shared/types';
+import { StorageManager } from '@/shared/StorageManager';
+import RuleManager from './components/RuleManager';
+import ProfileManager from './components/ProfileManager';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -53,7 +56,7 @@ class ErrorBoundary extends React.Component<
 
 const OptionsApp: React.FC = () => {
   const [config, setConfig] = useState<UserConfig>({
-    tabLimit: 10,
+    tabLimit: 25,
     autoCloseEnabled: false,
     autoCloseDelay: 30,
     theme: 'auto',
@@ -132,12 +135,12 @@ const OptionsApp: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '24px' }}>
-      <header style={{ marginBottom: '32px', borderBottom: '1px solid #e8eaed', paddingBottom: '16px' }}>
-        <h1 style={{ margin: '0 0 8px 0', fontSize: '24px', color: '#1a73e8' }}>
+    <div style={{ padding: '24px' }} className="dark:bg-gray-900 dark:text-gray-100">
+      <header style={{ marginBottom: '32px', borderBottom: '1px solid #e8eaed', paddingBottom: '16px' }} className="dark:border-gray-700">
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '24px', color: '#1a73e8' }} className="dark:text-blue-400">
           TabGuard Pro Settings
         </h1>
-        <p style={{ margin: 0, color: '#666' }}>
+        <p style={{ margin: 0, color: '#666' }} className="dark:text-gray-400">
           Configure your tab management preferences
         </p>
       </header>
@@ -156,7 +159,7 @@ const OptionsApp: React.FC = () => {
               min="1"
               max="100"
               value={config.tabLimit}
-              onChange={(e) => updateConfig({ tabLimit: parseInt(e.target.value) || 10 })}
+              onChange={(e) => updateConfig({ tabLimit: parseInt(e.target.value) || 25 })}
               style={{
                 padding: '8px 12px',
                 border: '1px solid #dadce0',
@@ -167,6 +170,11 @@ const OptionsApp: React.FC = () => {
             <span style={{ color: '#666', fontSize: '14px' }}>
               (Recommended: 5-15 tabs)
             </span>
+          </div>
+          <div style={{ marginTop: '12px' }}>
+            <p style={{ fontSize: '14px', color: '#666' }}>
+              This is the global tab limit that applies to all websites. For site-specific limits, use the Rules section below.
+            </p>
           </div>
         </section>
 
@@ -242,6 +250,118 @@ const OptionsApp: React.FC = () => {
             />
             Show notifications when tab limit is reached
           </label>
+          
+          {config.notificationsEnabled && (
+            <div style={{ marginTop: '12px', marginLeft: '24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={true}
+                    onChange={() => {}}
+                  />
+                  Tab limit reached
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={true}
+                    onChange={() => {}}
+                  />
+                  Tabs auto-closed
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => {}}
+                  />
+                  Play sound with notifications
+                </label>
+              </div>
+              <div style={{ marginTop: '12px' }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      // Show a simple alert to confirm the button works
+                      alert('Sending test notification...');
+                      
+                      // Use Chrome's extension API to show a notification through the background script
+                      chrome.runtime.sendMessage({
+                        action: 'showNotification',
+                        title: 'TabGuard Pro Test',
+                        message: 'This is a test notification from TabGuard Pro.',
+                        silent: false
+                      }, (response) => {
+                        if (chrome.runtime.lastError) {
+                          console.error('Message sending error:', chrome.runtime.lastError);
+                          alert(`Failed to send message: ${chrome.runtime.lastError.message}`);
+                        } else if (!response || !response.success) {
+                          console.error('Notification failed:', response?.error || 'Unknown error');
+                          alert(`Failed to show notification: ${response?.error || 'Unknown error'}`);
+                        } else {
+                          console.log('Notification sent successfully with ID:', response.notificationId);
+                        }
+                      });
+                    } catch (error) {
+                      console.error('Failed to show test notification:', error);
+                      alert(`Failed to show test notification: ${error instanceof Error ? error.message : String(error)}`);
+                    }
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    backgroundColor: '#f8f9fa',
+                    color: '#3c4043',
+                    border: '1px solid #dadce0',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Test Notification
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+        
+        {/* Tab Rules */}
+        <section>
+          <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Tab Rules</h2>
+          <div style={{ 
+            border: '1px solid #dadce0', 
+            borderRadius: '8px', 
+            padding: '16px',
+            backgroundColor: '#fff',
+            color: '#333'
+          }} className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200">
+            <RuleManager 
+              rules={config.rules} 
+              onRulesChange={(rules) => updateConfig({ rules })}
+            />
+          </div>
+        </section>
+        
+        {/* User Profiles */}
+        <section>
+          <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>User Profiles</h2>
+          <div style={{ 
+            border: '1px solid #dadce0', 
+            borderRadius: '8px', 
+            padding: '16px',
+            backgroundColor: '#fff',
+            color: '#333'
+          }} className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200">
+            <ProfileManager 
+              profiles={config.profiles}
+              currentConfig={config}
+              onProfilesChange={(profiles) => updateConfig({ profiles })}
+              onProfileActivate={(profile) => {
+                // When a profile is activated, we update the entire config
+                setConfig({...profile.config, profiles: config.profiles});
+              }}
+            />
+          </div>
         </section>
 
         {/* Data Management Section */}
@@ -459,9 +579,9 @@ const OptionsApp: React.FC = () => {
           backgroundColor: '#f8f9fa',
           borderRadius: '8px',
           border: '1px solid #e8eaed'
-        }}>
-          <h2 style={{ fontSize: '18px', marginBottom: '12px' }}>Premium Features</h2>
-          <p style={{ margin: '0 0 12px 0', color: '#666' }}>
+        }} className="dark:bg-gray-800 dark:border-gray-700">
+          <h2 style={{ fontSize: '18px', marginBottom: '12px' }} className="dark:text-gray-200">Premium Features</h2>
+          <p style={{ margin: '0 0 12px 0', color: '#666' }} className="dark:text-gray-400">
             Unlock advanced tab management with AI-powered insights, custom rules, and team features.
           </p>
           <button
@@ -473,6 +593,7 @@ const OptionsApp: React.FC = () => {
               borderRadius: '4px',
               cursor: 'pointer'
             }}
+            className="dark:bg-blue-600 dark:hover:bg-blue-700"
             disabled
           >
             Upgrade to Premium (Coming Soon)
@@ -486,7 +607,7 @@ const OptionsApp: React.FC = () => {
         paddingTop: '16px',
         borderTop: '1px solid #e8eaed',
         textAlign: 'right'
-      }}>
+      }} className="dark:border-gray-700">
         <button
           onClick={saveConfiguration}
           disabled={saving}

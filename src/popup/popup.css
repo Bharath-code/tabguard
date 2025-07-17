@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  width: 350px;
+  height: 400px;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* Dark mode support */
+.dark {
+  @apply bg-gray-900 text-white;
+}
+
+.dark .primary-button {
+  @apply bg-primary-dark hover:bg-primary;
+}
+
+.dark .secondary-button {
+  @apply bg-gray-800 text-gray-200 hover:bg-gray-700 border-gray-700;
+}
+
+.dark header h1 {
+  @apply text-primary-light;
+}
+
+.dark footer {
+  @apply text-gray-500;
+}
+
+/* Custom component styles */
+.tab-counter {
+  @apply text-2xl font-bold;
+}
+
+.quick-action-button {
+  @apply flex items-center justify-center px-4 py-2 rounded-md transition-colors duration-200;
+}
+
+.primary-button {
+  @apply bg-primary text-white hover:bg-primary-dark;
+}
+
+.secondary-button {
+  @apply bg-gray-100 text-gray-800 hover:bg-gray-200 border border-gray-300;
+}
+
+.warning-badge {
+  @apply text-xs px-2 py-0.5 rounded-full;
+}
+
+/* Toggle Switch Styles */
+.toggle-checkbox {
+  @apply right-0 border-2 border-gray-300 dark:border-gray-600;
+  transition: all 0.3s;
+  z-index: 3;
+}
+
+.toggle-checkbox:checked {
+  @apply right-0 border-primary bg-primary;
+  transform: translateX(100%);
+}
+
+.toggle-checkbox:checked+.toggle-label {
+  @apply bg-primary bg-opacity-50;
+}
+
+.toggle-label {
+  @apply block overflow-hidden h-6 rounded-full cursor-pointer;
+  transition: background-color 0.3s ease;
+}
+
+/* Animation for progress bar */
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Hover effects for buttons */
+.quick-action-button:hover {
+  @apply transform scale-105 transition-transform duration-200;
+}
+
+.quick-action-button:active {
+  @apply transform scale-95 transition-transform duration-100;
+}
+
+/* Custom scrollbar for popup */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+.dark ::-webkit-scrollbar-track {
+  @apply bg-gray-800;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-gray-700;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-600;
+}
+
+/* Settings Panel Styles */
+.settings-panel .section-header {
+  @apply flex items-center justify-between cursor-pointer py-2;
+}
+
+.settings-panel .section-content {
+  @apply mt-2 transition-all duration-300 ease-in-out;
+}
+
+/* Range Input Styling */
+input[type="range"] {
+  @apply appearance-none bg-gray-200 dark:bg-gray-700 h-2 rounded-lg;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none w-4 h-4 rounded-full bg-primary border-none cursor-pointer;
+}
+
+input[type="range"]:focus {
+  @apply outline-none;
+}
+
+input[type="range"]:disabled::-webkit-slider-thumb {
+  @apply bg-gray-400 dark:bg-gray-600;
+}
+
+/* Accordion Animation */
+.settings-panel button svg {
+  @apply transition-transform duration-300;
+}
+
+/* Notification Settings Expandable Section */
+#notification-options {
+  @apply transition-all duration-300 ease-in-out;
+  max-height: 0;
+  overflow: hidden;
+}
+
+#notification-options.expanded {
+  max-height: 500px;
+}
