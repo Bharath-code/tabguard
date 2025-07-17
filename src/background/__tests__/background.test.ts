@@ -267,15 +267,27 @@ describe('Background Script', () => {
       const existingConfig = {
         userConfig: {
           tabLimit: 5,
-          theme: 'dark'
+          autoCloseEnabled: false,
+          autoCloseDelay: 30,
+          theme: 'dark',
+          notificationsEnabled: true,
+          rules: [],
+          profiles: []
         }
       };
-      mockChrome.storage.sync.get.mockResolvedValue(existingConfig);
+      
+      // Mock multiple calls for StorageManager
+      mockChrome.storage.sync.get
+        .mockResolvedValueOnce(existingConfig) // First call to get existing config
+        .mockResolvedValueOnce({ configVersion: '1.0.0' }); // Second call to get version
       mockChrome.tabs.query.mockResolvedValue([]);
 
       await backgroundModule.initializeExtension();
 
-      expect(mockChrome.storage.sync.set).not.toHaveBeenCalled();
+      // Should not set userConfig since it already exists and is valid
+      expect(mockChrome.storage.sync.set).not.toHaveBeenCalledWith(
+        expect.objectContaining({ userConfig: expect.anything() })
+      );
     });
   });
 });

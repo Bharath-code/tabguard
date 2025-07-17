@@ -63,7 +63,7 @@ export class TabManager {
         try {
             // Reload config to get latest settings
             await this.loadConfiguration();
-            
+
             const effectiveLimit = limit || this.config?.tabLimit || 10;
             const currentCount = await this.getCurrentTabCount();
 
@@ -75,7 +75,7 @@ export class TabManager {
 
             if (!result.allowed) {
                 result.message = `Tab limit reached: ${currentCount}/${effectiveLimit} tabs open`;
-                
+
                 // Show notification if enabled
                 if (this.config?.notificationsEnabled) {
                     await this.showLimitViolationNotification(currentCount, effectiveLimit);
@@ -104,7 +104,7 @@ export class TabManager {
         try {
             // Get all tabs and find the most recently created one
             const allTabs = await chrome.tabs.query({});
-            
+
             if (allTabs.length === 0) return;
 
             // Sort by creation time (most recent first) based on tab ID as proxy
@@ -115,7 +115,7 @@ export class TabManager {
             if (mostRecentTab.id) {
                 console.log(`Blocking new tab by closing tab ${mostRecentTab.id}: ${mostRecentTab.title}`);
                 await chrome.tabs.remove(mostRecentTab.id);
-                
+
                 // Update our internal count
                 this.currentTabCount = Math.max(0, this.currentTabCount - 1);
                 this.tabMetadata.delete(mostRecentTab.id);
@@ -210,7 +210,7 @@ export class TabManager {
             for (const metadata of this.tabMetadata.values()) {
                 if (!metadata.isActive) {
                     const inactiveMinutes = (now.getTime() - metadata.lastAccessed.getTime()) / (1000 * 60);
-                    
+
                     // Suggest tabs inactive for more than 30 minutes
                     if (inactiveMinutes > 30) {
                         suggestions.push({
@@ -250,7 +250,7 @@ export class TabManager {
         if (productiveDomains.some(d => domain.includes(d))) return 8;
         if (socialDomains.some(d => domain.includes(d))) return 2;
         if (entertainmentDomains.some(d => domain.includes(d))) return 1;
-        
+
         return 5; // Neutral score for unknown domains
     }
 

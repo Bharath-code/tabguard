@@ -3,11 +3,13 @@
 
 import { UserConfig } from '../shared/types';
 import { TabManager } from './TabManager';
+import { StorageManager } from '../shared/StorageManager';
 
 console.log('TabGuard Pro background service worker loaded');
 
-// Initialize TabManager instance
+// Initialize TabManager and StorageManager instances
 const tabManager = new TabManager();
+const storageManager = new StorageManager();
 
 interface TabCountResult {
     totalTabs: number;
@@ -65,21 +67,9 @@ chrome.windows.onRemoved.addListener((windowId) => {
 // Core initialization function
 async function initializeExtension(): Promise<void> {
     try {
-        // Set default configuration if not exists
-        const config = await chrome.storage.sync.get('userConfig');
-        if (!config.userConfig) {
-            const defaultConfig: UserConfig = {
-                tabLimit: 10,
-                autoCloseEnabled: false,
-                autoCloseDelay: 30,
-                theme: 'auto',
-                notificationsEnabled: true,
-                rules: [],
-                profiles: []
-            };
-            await chrome.storage.sync.set({ userConfig: defaultConfig });
-            console.log('Default configuration set');
-        }
+        // Initialize StorageManager with default configuration
+        await storageManager.initialize();
+        console.log('StorageManager initialized successfully');
 
         // Initialize tab count and metadata
         await initializeTabTracking();
@@ -217,9 +207,13 @@ async function handleWindowRemoved(windowId: number): Promise<void> {
     }
 }
 
-// Utility function to get TabManager instance (for testing and external access)
+// Utility functions to get manager instances (for testing and external access)
 export function getTabManager(): TabManager {
     return tabManager;
+}
+
+export function getStorageManager(): StorageManager {
+    return storageManager;
 }
 
 // Error logging utility
@@ -247,6 +241,59 @@ async function logError(context: string, error: any, metadata?: any): Promise<vo
         console.error('Failed to log error:', logError);
     }
 }
+
+// Message handlers for UI interactions
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    (async () => {
+        try {
+            switch (message.action) {
+                case 'createBackup':
+                    await storageManager.createBackup();
+                    sendResponse(true);
+                    break;
+                    
+                case 'restoreFromBackup':
+                    const restored = await storageManager.restoreFromBackup();
+                    sendResponse(restored);
+                    break;
+                    
+                case 'exportConfig':
+                    const jsonData = await storageManager.exportConfig();
+                    sendResponse(jsonData);
+                    break;
+                    
+                case 'importConfig':
+                    const importResult = await storageManager.importConfig(message.data);
+                    sendResponse(importResult);
+                    break;
+                    
+                case 'resetToDefaults':
+                    await storageManager.resetToDefaults();
+                    sendResponse(true);
+                    break;
+                    
+                case 'getStorageStats':
+                    const stats = await storageManager.getStorageStats();
+                    sendResponse(stats);
+                    break;
+                    
+                case 'getBackups':
+                    const backups = await storageManager.getBackups();
+                    sendResponse(backups);
+                    break;
+                    
+                default:
+                    sendResponse({ error: 'Unknown action' });
+            }
+        } catch (error) {
+            console.error(`Error handling message ${message.action}:`, error);
+            sendResponse({ error: String(error) });
+        }
+    })();
+    
+    // Return true to indicate we will send a response asynchronously
+    return true;
+});
 
 // Export functions for testing
 if (typeof module !== 'undefined' && module.exports) {

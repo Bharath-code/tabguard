@@ -244,6 +244,215 @@ const OptionsApp: React.FC = () => {
           </label>
         </section>
 
+        {/* Data Management Section */}
+        <section>
+          <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Data Management</h2>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Backup and Restore */}
+            <div>
+              <h3 style={{ fontSize: '16px', marginBottom: '8px' }}>Backup & Restore</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      // Call the background script to create a backup
+                      await chrome.runtime.sendMessage({ action: 'createBackup' });
+                      alert('Backup created successfully!');
+                    } catch (error) {
+                      console.error('Failed to create backup:', error);
+                      alert('Failed to create backup. Please try again.');
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f8f9fa',
+                    color: '#3c4043',
+                    border: '1px solid #dadce0',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Create Backup
+                </button>
+                
+                <button
+                  onClick={async () => {
+                    try {
+                      // Call the background script to restore from backup
+                      const result = await chrome.runtime.sendMessage({ action: 'restoreFromBackup' });
+                      if (result) {
+                        alert('Configuration restored successfully!');
+                        // Reload configuration
+                        loadConfiguration();
+                      } else {
+                        alert('No backup found to restore.');
+                      }
+                    } catch (error) {
+                      console.error('Failed to restore backup:', error);
+                      alert('Failed to restore backup. Please try again.');
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f8f9fa',
+                    color: '#3c4043',
+                    border: '1px solid #dadce0',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Restore from Backup
+                </button>
+              </div>
+            </div>
+            
+            {/* Export and Import */}
+            <div>
+              <h3 style={{ fontSize: '16px', marginBottom: '8px' }}>Export & Import</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      // Call the background script to export configuration
+                      const jsonData = await chrome.runtime.sendMessage({ action: 'exportConfig' });
+                      
+                      // Create a download link
+                      const blob = new Blob([jsonData], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `tabguard-config-${new Date().toISOString().split('T')[0]}.json`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Failed to export configuration:', error);
+                      alert('Failed to export configuration. Please try again.');
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f8f9fa',
+                    color: '#3c4043',
+                    border: '1px solid #dadce0',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Export Configuration
+                </button>
+                
+                <label
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f8f9fa',
+                    color: '#3c4043',
+                    border: '1px solid #dadce0',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    display: 'inline-block'
+                  }}
+                >
+                  Import Configuration
+                  <input
+                    type="file"
+                    accept=".json"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      try {
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                          const jsonData = event.target?.result as string;
+                          
+                          // Call the background script to import configuration
+                          const result = await chrome.runtime.sendMessage({ 
+                            action: 'importConfig', 
+                            data: jsonData 
+                          });
+                          
+                          if (result.success) {
+                            alert('Configuration imported successfully!');
+                            // Reload configuration
+                            loadConfiguration();
+                          } else {
+                            alert(`Import failed: ${result.messages.join('\n')}`);
+                          }
+                        };
+                        reader.readAsText(file);
+                      } catch (error) {
+                        console.error('Failed to import configuration:', error);
+                        alert('Failed to import configuration. Please try again.');
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            
+            {/* Reset and Storage Stats */}
+            <div>
+              <h3 style={{ fontSize: '16px', marginBottom: '8px' }}>Other Options</h3>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  onClick={async () => {
+                    if (confirm('Are you sure you want to reset all settings to default values? This cannot be undone.')) {
+                      try {
+                        // Call the background script to reset configuration
+                        await chrome.runtime.sendMessage({ action: 'resetToDefaults' });
+                        alert('Settings reset to defaults successfully!');
+                        // Reload configuration
+                        loadConfiguration();
+                      } catch (error) {
+                        console.error('Failed to reset settings:', error);
+                        alert('Failed to reset settings. Please try again.');
+                      }
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f8f9fa',
+                    color: '#d93025',
+                    border: '1px solid #d93025',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Reset to Defaults
+                </button>
+                
+                <button
+                  onClick={async () => {
+                    try {
+                      // Call the background script to get storage stats
+                      const stats = await chrome.runtime.sendMessage({ action: 'getStorageStats' });
+                      const usedPercent = Math.round((stats.bytesInUse / stats.quota) * 100);
+                      alert(`Storage Usage: ${stats.bytesInUse} bytes (${usedPercent}% of quota)`);
+                    } catch (error) {
+                      console.error('Failed to get storage stats:', error);
+                      alert('Failed to get storage statistics. Please try again.');
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f8f9fa',
+                    color: '#3c4043',
+                    border: '1px solid #dadce0',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  View Storage Usage
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Premium Features Placeholder */}
         <section style={{
           padding: '16px',
