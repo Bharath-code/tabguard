@@ -19,11 +19,22 @@ export interface TabRule {
   enabled: boolean;
 }
 
-export interface RuleCondition {
-  type: 'domain' | 'category' | 'time' | 'tab_count';
-  operator: 'equals' | 'contains' | 'greater_than' | 'less_than';
-  value: string | number;
+export type RuleConditionType = 'domain' | 'category' | 'time' | 'tab_count' | 'day_of_week' | 'focus_mode';
+export type RuleOperator = 'equals' | 'contains' | 'greater_than' | 'less_than' | 'in_range' | 'not_equals';
+export type LogicalOperator = 'and' | 'or';
+
+export interface SimpleRuleCondition {
+  type: RuleConditionType;
+  operator: RuleOperator;
+  value: string | number | [number, number]; // For in_range operator, value is [min, max]
 }
+
+export interface CompositeRuleCondition {
+  operator: LogicalOperator;
+  conditions: (SimpleRuleCondition | CompositeRuleCondition)[];
+}
+
+export type RuleCondition = SimpleRuleCondition | CompositeRuleCondition;
 
 export interface RuleAction {
   type: 'limit_tabs' | 'close_tabs' | 'block_new_tabs';

@@ -261,6 +261,15 @@ export class TabActivityTracker {
       })
       .sort((a, b) => a.lastAccessed.getTime() - b.lastAccessed.getTime()); // Oldest first
   }
+  
+  /**
+   * Get activity data for a specific tab
+   * @param tabId The ID of the tab to get activity for
+   * @returns The tab activity data or undefined if not found
+   */
+  getTabActivity(tabId: number): TabActivityData | undefined {
+    return this.tabActivities.get(tabId);
+  }
 
   /**
    * Get summary of tab activity

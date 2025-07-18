@@ -4,6 +4,7 @@ import { UserConfig, TabRule, UserProfile } from '@/shared/types';
 import { StorageManager } from '@/shared/StorageManager';
 import RuleManager from './components/RuleManager';
 import ProfileManager from './components/ProfileManager';
+import FocusScheduler from './components/FocusScheduler';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -361,6 +362,20 @@ const OptionsApp: React.FC = () => {
                 setConfig({...profile.config, profiles: config.profiles});
               }}
             />
+          </div>
+        </section>
+        
+        {/* Focus Mode Scheduler */}
+        <section>
+          <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Focus Mode & Time-Based Rules</h2>
+          <div style={{ 
+            border: '1px solid #dadce0', 
+            borderRadius: '8px', 
+            padding: '16px',
+            backgroundColor: '#fff',
+            color: '#333'
+          }} className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200">
+            <FocusScheduler />
           </div>
         </section>
 

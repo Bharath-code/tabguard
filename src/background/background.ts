@@ -6,6 +6,8 @@ import { StorageManager } from '../shared/StorageManager';
 import { TabActivityTracker } from './TabActivityTracker';
 import { TabSuggestionEngine } from './TabSuggestionEngine';
 import { AutoCloseManager } from './AutoCloseManager';
+import { RuleEngine } from './RuleEngine';
+import { FocusModeManager } from './FocusModeManager';
 
 console.log('TabGuard Pro background service worker loaded');
 
@@ -15,6 +17,8 @@ const tabActivityTracker = new TabActivityTracker();
 const tabSuggestionEngine = new TabSuggestionEngine(tabActivityTracker);
 const storageManager = new StorageManager();
 const autoCloseManager = new AutoCloseManager(tabActivityTracker, tabSuggestionEngine);
+const ruleEngine = new RuleEngine(tabActivityTracker);
+const focusModeManager = new FocusModeManager(ruleEngine);
 
 interface TabCountResult {
     totalTabs: number;
@@ -86,11 +90,21 @@ async function initializeExtension(): Promise<void> {
         // Initialize tab count and metadata
         await initializeTabTracking();
         
-        // Initialize AutoCloseManager with user configuration
+        // Initialize AutoCloseManager and RuleEngine with user configuration
         const { userConfig } = await chrome.storage.sync.get('userConfig');
         if (userConfig) {
             await autoCloseManager.initialize(userConfig);
             console.log('AutoCloseManager initialized successfully');
+            
+            // Initialize RuleEngine with rules from user config
+            if (userConfig.rules && Array.isArray(userConfig.rules)) {
+                ruleEngine.setRules(userConfig.rules);
+                console.log(`RuleEngine initialized with ${userConfig.rules.length} rules`);
+            }
+            
+            // Initialize FocusModeManager
+            await focusModeManager.initialize();
+            console.log('FocusModeManager initialized successfully');
         }
 
         console.log('Extension initialized successfully');
@@ -157,8 +171,8 @@ async function handleTabCreated(tab: chrome.tabs.Tab): Promise<void> {
         // Add tab to TabActivityTracker
         tabActivityTracker.trackTab(tab);
 
-        // Enforce tab limit using TabManager
-        const limitResult = await tabManager.enforceTabLimit();
+        // Enforce tab limit using TabManager with RuleEngine integration
+        const limitResult = await tabManager.enforceTabLimit(undefined, tab, ruleEngine);
 
         if (!limitResult.allowed) {
             console.log(`Tab limit enforcement: ${limitResult.message}`);
@@ -267,6 +281,14 @@ export function getStorageManager(): StorageManager {
 
 export function getAutoCloseManager(): AutoCloseManager {
     return autoCloseManager;
+}
+
+export function getRuleEngine(): RuleEngine {
+    return ruleEngine;
+}
+
+export function getFocusModeManager(): FocusModeManager {
+    return focusModeManager;
 }
 
 // Error logging utility
@@ -607,6 +629,278 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: true });
                     } catch (error) {
                         console.error('Error cancelling pending closures:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                // Rule Engine message handlers
+                case 'getRules':
+                    try {
+                        const rules = ruleEngine.getRules();
+                        sendResponse({ rules });
+                    } catch (error) {
+                        console.error('Error getting rules:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'setRules':
+                    try {
+                        if (message.rules && Array.isArray(message.rules)) {
+                            ruleEngine.setRules(message.rules);
+                            
+                            // Also update user config in storage
+                            const { userConfig } = await chrome.storage.sync.get('userConfig');
+                            if (userConfig) {
+                                const updatedConfig = { 
+                                    ...userConfig, 
+                                    rules: message.rules
+                                };
+                                await chrome.storage.sync.set({ userConfig: updatedConfig });
+                                tabManager.updateConfig(updatedConfig);
+                            }
+                            
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'No rules provided or invalid format' });
+                        }
+                    } catch (error) {
+                        console.error('Error setting rules:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'evaluateRulesForTab':
+                    try {
+                        if (message.tabId) {
+                            const tab = await chrome.tabs.get(message.tabId);
+                            const tabCount = await tabManager.getCurrentTabCount();
+                            const context = await ruleEngine.createContextFromTab(tab, tabCount);
+                            const results = ruleEngine.evaluateRules(context);
+                            const resolvedActions = ruleEngine.resolveConflicts(results);
+                            
+                            sendResponse({ 
+                                results, 
+                                resolvedActions,
+                                conflicts: ruleEngine.getConflicts(),
+                                context
+                            });
+                        } else {
+                            sendResponse({ success: false, error: 'No tab ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error evaluating rules for tab:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                // Focus Mode message handlers
+                case 'getFocusModeSettings':
+                    try {
+                        const settings = focusModeManager.getSettings();
+                        sendResponse({ settings });
+                    } catch (error) {
+                        console.error('Error getting focus mode settings:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'updateFocusModeSettings':
+                    try {
+                        if (message.settings) {
+                            const success = await focusModeManager.updateSettings(message.settings);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No settings provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error updating focus mode settings:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'startFocusMode':
+                    try {
+                        const success = await focusModeManager.startFocusMode(
+                            message.duration,
+                            message.settings
+                        );
+                        sendResponse({ success });
+                    } catch (error) {
+                        console.error('Error starting focus mode:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'stopFocusMode':
+                    try {
+                        const success = await focusModeManager.stopFocusMode();
+                        sendResponse({ success });
+                    } catch (error) {
+                        console.error('Error stopping focus mode:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'isFocusModeActive':
+                    try {
+                        const active = focusModeManager.isFocusModeActive();
+                        sendResponse({ active });
+                    } catch (error) {
+                        console.error('Error checking focus mode status:', error);
+                        sendResponse({ active: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'grantTemporaryAccess':
+                    try {
+                        if (message.domain) {
+                            const success = await focusModeManager.grantTemporaryAccess(message.domain);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No domain provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error granting temporary access:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'getScheduledSessions':
+                    try {
+                        const sessions = focusModeManager.getScheduledSessions();
+                        sendResponse({ sessions });
+                    } catch (error) {
+                        console.error('Error getting scheduled sessions:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'addScheduledSession':
+                    try {
+                        if (message.session) {
+                            const id = await focusModeManager.addScheduledSession(message.session);
+                            sendResponse({ success: true, id });
+                        } else {
+                            sendResponse({ success: false, error: 'No session provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error adding scheduled session:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'updateScheduledSession':
+                    try {
+                        if (message.id && message.updates) {
+                            const success = await focusModeManager.updateScheduledSession(message.id, message.updates);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'Missing session ID or updates' });
+                        }
+                    } catch (error) {
+                        console.error('Error updating scheduled session:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'deleteScheduledSession':
+                    try {
+                        if (message.id) {
+                            const success = await focusModeManager.deleteScheduledSession(message.id);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No session ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error deleting scheduled session:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'getTimeBasedRules':
+                    try {
+                        const rules = focusModeManager.getTimeBasedRules();
+                        sendResponse({ rules });
+                    } catch (error) {
+                        console.error('Error getting time-based rules:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'addTimeBasedRule':
+                    try {
+                        if (message.rule) {
+                            const id = await focusModeManager.addTimeBasedRule(message.rule);
+                            sendResponse({ success: true, id });
+                        } else {
+                            sendResponse({ success: false, error: 'No rule provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error adding time-based rule:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'updateTimeBasedRule':
+                    try {
+                        if (message.id && message.updates) {
+                            const success = await focusModeManager.updateTimeBasedRule(message.id, message.updates);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'Missing rule ID or updates' });
+                        }
+                    } catch (error) {
+                        console.error('Error updating time-based rule:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'deleteTimeBasedRule':
+                    try {
+                        if (message.id) {
+                            const success = await focusModeManager.deleteTimeBasedRule(message.id);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No rule ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error deleting time-based rule:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'getTabLimitForDomain':
+                    try {
+                        if (message.url) {
+                            let domain = '';
+                            try {
+                                if (message.url.startsWith('http')) {
+                                    domain = new URL(message.url).hostname;
+                                }
+                            } catch (urlError) {
+                                console.error('Error parsing URL:', urlError);
+                            }
+                            
+                            const tabCount = await tabManager.getCurrentTabCount();
+                            const context = {
+                                url: message.url,
+                                domain,
+                                tabId: -1,
+                                windowId: -1,
+                                tabCount,
+                                currentTime: new Date(),
+                                category: RuleEngine.categorizeUrl(message.url),
+                                isActive: true
+                            };
+                            
+                            const limit = ruleEngine.getTabLimitForContext(context, message.defaultLimit || 25);
+                            sendResponse({ limit, domain, category: context.category });
+                        } else {
+                            sendResponse({ success: false, error: 'No URL provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error getting tab limit for domain:', error);
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;

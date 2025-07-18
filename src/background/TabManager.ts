@@ -58,14 +58,49 @@ export class TabManager {
     /**
      * Enforce tab limit - core enforcement logic
      * Returns whether a new tab should be allowed
+     * 
+     * This method now supports rule-based tab limits via the RuleEngine
      */
-    async enforceTabLimit(limit?: number): Promise<TabLimitResult> {
+    async enforceTabLimit(limit?: number, tab?: chrome.tabs.Tab, ruleEngine?: any): Promise<TabLimitResult> {
         try {
             // Reload config to get latest settings
             await this.loadConfiguration();
 
-            const effectiveLimit = limit || this.config?.tabLimit || 25;
+            // Default limit from config
+            let effectiveLimit = limit || this.config?.tabLimit || 25;
             const currentCount = await this.getCurrentTabCount();
+            
+            // If RuleEngine and tab are provided, check for domain-specific limits
+            if (ruleEngine && tab && tab.url) {
+                try {
+                    // Create context for rule evaluation
+                    const context = await ruleEngine.createContextFromTab(tab, currentCount);
+                    
+                    // Get domain-specific limit if any rule matches
+                    const ruleLimit = ruleEngine.getTabLimitForContext(context, effectiveLimit);
+                    
+                    // Check if we should block new tabs based on rules
+                    const shouldBlock = ruleEngine.shouldBlockNewTabs(context);
+                    
+                    if (shouldBlock) {
+                        return {
+                            allowed: false,
+                            currentCount,
+                            limit: effectiveLimit,
+                            message: `New tabs blocked by rule: ${context.domain}`
+                        };
+                    }
+                    
+                    // Use rule-based limit if available
+                    if (ruleLimit !== effectiveLimit) {
+                        console.log(`Rule-based tab limit applied: ${ruleLimit} for ${context.domain}`);
+                        effectiveLimit = ruleLimit;
+                    }
+                } catch (ruleError) {
+                    console.error('Error applying rule-based tab limits:', ruleError);
+                    // Continue with default limit on rule evaluation error
+                }
+            }
 
             const result: TabLimitResult = {
                 allowed: currentCount < effectiveLimit,

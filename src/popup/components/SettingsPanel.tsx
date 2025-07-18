@@ -5,6 +5,7 @@ import TabLimitSettings from './TabLimitSettings';
 import ThemeSelector from './ThemeSelector';
 import NotificationSettings from './NotificationSettings';
 import AutoCloseSettings from './AutoCloseSettings';
+import FocusModeSettings from './FocusModeSettings';
 
 interface SettingsPanelProps {
   className?: string;
@@ -243,7 +244,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </div>
             </div>
             
-            {/* Auto-Close Settings Section (Placeholder for future implementation) */}
+            {/* Auto-Close Settings Section */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
               <button 
                 className="w-full px-4 py-3 text-left flex justify-between items-center focus:outline-none"
@@ -276,6 +277,48 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <div className="text-center py-4 px-4">
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                       Upgrade to premium to automatically close inactive tabs and save system resources.
+                    </p>
+                    <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-md shadow-sm hover:from-yellow-500 hover:to-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2">
+                      Upgrade to Premium
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Focus Mode Settings Section */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button 
+                className="w-full px-4 py-3 text-left flex justify-between items-center focus:outline-none"
+                onClick={() => toggleSection('focusMode')}
+              >
+                <div className="flex items-center">
+                  <span className="font-medium text-gray-800 dark:text-gray-200">Focus Mode</span>
+                  {isPremium ? null : (
+                    <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 rounded-full">
+                      Premium
+                    </span>
+                  )}
+                </div>
+                <svg 
+                  className={`w-5 h-5 text-gray-500 transform transition-transform ${activeSection === 'focusMode' ? 'rotate-180' : ''}`} 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className={`${activeSection === 'focusMode' ? 'block' : 'hidden'}`}>
+                {isPremium ? (
+                  <FocusModeSettings 
+                    onClose={() => toggleSection('focusMode')}
+                  />
+                ) : (
+                  <div className="text-center py-4 px-4">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      Upgrade to premium to use Focus Mode with stricter tab limits and distraction blocking.
                     </p>
                     <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-md shadow-sm hover:from-yellow-500 hover:to-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2">
                       Upgrade to Premium

@@ -73,22 +73,22 @@
     - Add manual override and undo capabilities
     - _Requirements: 2.5, 5.3_
 
-- [-] 5. Develop advanced rule-based tab management
-  - [ ] 5.1 Create rule engine foundation
+- [x] 5. Develop advanced rule-based tab management
+  - [x] 5.1 Create rule engine foundation
     - Implement TabRule data model with condition/action structure
     - Build rule evaluation engine for different condition types
     - Create rule priority and conflict resolution system
     - Write comprehensive tests for rule processing
     - _Requirements: 5.1, 5.2_
 
-  - [ ] 5.2 Build domain and category-based rules
+  - [x] 5.2 Build domain and category-based rules
     - Implement domain matching and wildcard support
     - Create website categorization system (work, social, entertainment)
     - Build rule actions for different tab limits per category
     - Add UI for creating and managing domain rules
     - _Requirements: 5.1, 5.3_
 
-  - [ ] 5.3 Implement time-based and focus mode rules
+  - [x] 5.3 Implement time-based and focus mode rules
     - Create time-based rule conditions (work hours, weekends)
     - Build focus mode with temporary stricter limits
     - Implement distraction blocking during focus sessions
