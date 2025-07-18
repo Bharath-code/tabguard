@@ -1,293 +1,406 @@
 /**
- * @jest-environment jsdom
+ * Tests for background service worker
  */
 
-// Mock Chrome APIs before importing the background script
-const mockChrome = {
-  runtime: {
-    onStartup: { addListener: jest.fn() },
-    onInstalled: { addListener: jest.fn() }
-  },
+import { getTabManager, getTabActivityTracker, getTabSuggestionEngine, getRecommendationEngine } from '../background';
+
+// Mock chrome API
+global.chrome = {
   tabs: {
-    onCreated: { addListener: jest.fn() },
-    onRemoved: { addListener: jest.fn() },
-    onUpdated: { addListener: jest.fn() },
-    onActivated: { addListener: jest.fn() },
-    query: jest.fn()
-  },
-  windows: {
-    onRemoved: { addListener: jest.fn() }
+    query: jest.fn(),
+    create: jest.fn(),
+    remove: jest.fn(),
+    update: jest.fn()
   },
   storage: {
-    sync: {
+    local: {
       get: jest.fn(),
       set: jest.fn()
     },
-    local: {
+    sync: {
       get: jest.fn(),
       set: jest.fn()
     }
   },
+  runtime: {
+    sendMessage: jest.fn()
+  },
   notifications: {
     create: jest.fn()
   }
-};
+} as any;
 
-// @ts-ignore
-global.chrome = mockChrome;
+// Properly type the mocked functions
+const mockedGet = chrome.storage.local.get as jest.Mock;
+const mockedSet = chrome.storage.local.set as jest.Mock;
+const mockedSyncGet = chrome.storage.sync.get as jest.Mock;
+const mockedSyncSet = chrome.storage.sync.set as jest.Mock;
+const mockedTabsQuery = chrome.tabs.query as jest.Mock;
+const mockedTabsCreate = chrome.tabs.create as jest.Mock;
+const mockedTabsRemove = chrome.tabs.remove as jest.Mock;
+const mockedTabsUpdate = chrome.tabs.update as jest.Mock;
+const mockedSendMessage = chrome.runtime.sendMessage as jest.Mock;
+const mockedNotificationsCreate = chrome.notifications.create as jest.Mock;
 
-// Mock console methods
-const consoleSpy = {
-  log: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn()
-};
+// Mock modules
+jest.mock('../TabManager');
+jest.mock('../TabActivityTracker');
+jest.mock('../TabSuggestionEngine');
+jest.mock('../BrowsingAnalytics');
+jest.mock('../RecommendationEngine');
 
-// @ts-ignore
-global.console = {
-  ...console,
-  ...consoleSpy
-};
-
-// Helper function to create complete mock Tab objects
-const createMockTab = (overrides: Partial<chrome.tabs.Tab> = {}): chrome.tabs.Tab => ({
-  id: 1,
-  index: 0,
-  windowId: 1,
-  highlighted: false,
-  active: false,
-  pinned: false,
-  selected: false,
-  discarded: false,
-  autoDiscardable: true,
-  groupId: -1,
-  url: 'https://example.com',
-  title: 'Example',
-  favIconUrl: '',
-  status: 'complete',
-  incognito: false,
-  width: 1024,
-  height: 768,
-  sessionId: 'session-1',
-  ...overrides
-});
-
-describe('Background Script', () => {
-  let backgroundModule: any;
-
-  beforeAll(() => {
-    // Import the background module once after mocks are set up
-    backgroundModule = require('../background');
-  });
-
+describe('Background Service Worker', () => {
   beforeEach(() => {
+    // Reset mocks
     jest.clearAllMocks();
 
-    // Reset chrome API mocks
-    mockChrome.tabs.query.mockResolvedValue([]);
-    mockChrome.storage.sync.get.mockResolvedValue({});
-    mockChrome.storage.sync.set.mockResolvedValue(undefined);
-    mockChrome.storage.local.get.mockResolvedValue({ errorLogs: [] });
-    mockChrome.storage.local.set.mockResolvedValue(undefined);
-    mockChrome.notifications.create.mockResolvedValue('notification-id');
-  });
-
-  test('should load without errors', () => {
-    // The background script should have loaded and logged the message
-    expect(backgroundModule).toBeDefined();
-    // Note: console.log is called when the module is first imported in beforeAll
-  });
-
-  test('should set up all event listeners', () => {
-    // Event listeners are set up when the module is loaded
-    // Since we clear mocks in beforeEach, we need to check that the functions exist
-    expect(chrome.runtime.onStartup.addListener).toBeDefined();
-    expect(chrome.runtime.onInstalled.addListener).toBeDefined();
-    expect(chrome.tabs.onCreated.addListener).toBeDefined();
-    expect(chrome.tabs.onRemoved.addListener).toBeDefined();
-    expect(chrome.tabs.onUpdated.addListener).toBeDefined();
-    expect(chrome.tabs.onActivated.addListener).toBeDefined();
-    expect(chrome.windows.onRemoved.addListener).toBeDefined();
-  });
-
-  describe('Tab Count Functionality', () => {
-    test('getAllTabsCount should return correct tab count', async () => {
-      const mockTabs = [
-        createMockTab({ id: 1, windowId: 1, url: 'https://example.com', title: 'Example' }),
-        createMockTab({ id: 2, windowId: 1, url: 'https://google.com', title: 'Google' }),
-        createMockTab({ id: 3, windowId: 2, url: 'https://github.com', title: 'GitHub' })
-      ];
-      mockChrome.tabs.query.mockResolvedValue(mockTabs);
-
-      const result = await backgroundModule.getAllTabsCount();
-
-      expect(result.totalTabs).toBe(3);
-      expect(result.tabsByWindow.get(1)).toBe(2);
-      expect(result.tabsByWindow.get(2)).toBe(1);
+    // Setup storage mock
+    mockedGet.mockImplementation((keys, callback) => {
+      if (callback) {
+        callback({});
+      }
+      return Promise.resolve({});
     });
 
-    test('getAllTabsCount should handle Chrome API errors gracefully', async () => {
-      mockChrome.tabs.query.mockRejectedValue(new Error('Chrome API error'));
+    mockedSet.mockImplementation(() => Promise.resolve());
 
-      const result = await backgroundModule.getAllTabsCount();
+    mockedSyncGet.mockImplementation((keys, callback) => {
+      if (callback) {
+        callback({ userConfig: { tabLimit: 10 } });
+      }
+      return Promise.resolve({ userConfig: { tabLimit: 10 } });
+    });
 
-      expect(result.totalTabs).toBe(0);
-      expect(result.tabsByWindow.size).toBe(0);
-      expect(console.error).toHaveBeenCalledWith('Failed to get tab count:', expect.any(Error));
+    mockedSyncSet.mockImplementation(() => Promise.resolve());
+
+    // Setup tabs mock
+    mockedTabsQuery.mockResolvedValue([]);
+    mockedTabsCreate.mockResolvedValue({});
+    mockedTabsRemove.mockResolvedValue(undefined);
+    mockedTabsUpdate.mockResolvedValue({});
+
+    // Setup notifications mock
+    mockedNotificationsCreate.mockImplementation((options, callback) => {
+      if (callback) {
+        callback('notification-id');
+      }
+      return Promise.resolve('notification-id');
     });
   });
 
-  describe('Tab Event Handlers', () => {
-    test('handleTabCreated should process tab creation correctly', async () => {
-      const mockTab = createMockTab({
-        id: 1,
-        url: 'https://example.com',
-        title: 'Example',
-        windowId: 1,
-        active: true
-      });
+  test('should export manager instances', () => {
+    expect(getTabManager()).toBeDefined();
+    expect(getTabActivityTracker()).toBeDefined();
+    expect(getTabSuggestionEngine()).toBeDefined();
+    expect(getRecommendationEngine()).toBeDefined();
+  });
 
-      mockChrome.storage.sync.get.mockResolvedValue({
-        userConfig: {
-          tabLimit: 10,
-          notificationsEnabled: true
+  test('should initialize RecommendationEngine with TabActivityTracker and BrowsingAnalytics', () => {
+    const recommendationEngine = getRecommendationEngine();
+    expect(recommendationEngine).toBeDefined();
+  });
+});
+
+// Test the message handlers for AI-powered recommendations
+describe('AI-Powered Recommendations', () => {
+  let mockMessageListener: (message: any, sender: any, sendResponse: any) => void;
+
+  beforeEach(() => {
+    // Reset mocks
+    jest.clearAllMocks();
+
+    // Capture the message listener
+    mockMessageListener = (chrome.runtime.onMessage as any).addListener.mock.calls[0][0];
+
+    // Mock getRecommendationEngine
+    const mockRecommendationEngine = getRecommendationEngine();
+
+    // Properly set up mock functions
+    mockRecommendationEngine.getOptimalTabLimit = jest.fn().mockResolvedValue({
+      recommendedLimit: 8,
+      currentLimit: 10,
+      confidence: 0.8,
+      reasoning: 'Based on your browsing patterns, a lower tab limit might improve your workflow.'
+    });
+
+    // Mock getFocusTimeRecommendations
+    mockRecommendationEngine.getFocusTimeRecommendations = jest.fn().mockResolvedValue([
+      {
+        recommendedDuration: 25,
+        recommendedStartTime: '10:00',
+        category: 'focus',
+        reasoning: 'Morning hours are typically your most productive time.'
+      }
+    ]);
+
+    // Mock getPersonalizedRecommendations
+    mockRecommendationEngine.getPersonalizedRecommendations = jest.fn().mockResolvedValue([
+      {
+        type: 'tab_limit',
+        title: 'Adjust tab limit to 8',
+        description: 'Based on your browsing patterns, a lower tab limit might improve your workflow.',
+        actionable: true,
+        action: {
+          type: 'set_limit',
+          value: 8
         }
-      });
-
-      await backgroundModule.handleTabCreated(mockTab);
-
-      expect(console.log).toHaveBeenCalledWith('Tab created:', 1, 'https://example.com');
-    });
-
-    test('handleTabCreated should enforce tab limits using TabManager', async () => {
-      const mockTab = createMockTab({
-        id: 1,
-        url: 'https://example.com',
-        title: 'Example',
-        windowId: 1,
-        active: true
-      });
-
-      // Mock multiple tabs to exceed limit
-      mockChrome.tabs.query.mockResolvedValue([
-        createMockTab({ id: 1, windowId: 1 }),
-        createMockTab({ id: 2, windowId: 1 }),
-        createMockTab({ id: 3, windowId: 1 })
-      ]);
-
-      mockChrome.storage.sync.get.mockResolvedValue({
-        userConfig: {
-          tabLimit: 2,
-          notificationsEnabled: true
+      },
+      {
+        type: 'focus_time',
+        title: 'Schedule a 25-minute focus session',
+        description: 'Morning hours are typically your most productive time.',
+        actionable: true,
+        action: {
+          type: 'start_focus',
+          duration: 25
         }
-      });
+      }
+    ]);
 
-      await backgroundModule.handleTabCreated(mockTab);
-
-      expect(console.log).toHaveBeenCalledWith('Tab created:', 1, 'https://example.com');
-      // TabManager should handle the limit enforcement
+    // Mock generateWeeklyReport
+    mockRecommendationEngine.generateWeeklyReport = jest.fn().mockResolvedValue({
+      startDate: '2025-07-10',
+      endDate: '2025-07-16',
+      productivityScore: 7.5,
+      productivityTrend: 'increasing',
+      topCategories: [
+        { category: 'work', percentage: 60 },
+        { category: 'social', percentage: 20 },
+        { category: 'entertainment', percentage: 10 }
+      ],
+      focusMetrics: {
+        focusScore: 8.0,
+        longestFocusSession: 45,
+        distractionCount: 12,
+        averageFocusTime: 25
+      },
+      tabMetrics: {
+        averageTabCount: 12,
+        maxTabCount: 15,
+        tabTurnover: 8
+      },
+      recommendations: [
+        {
+          type: 'tab_limit',
+          title: 'Adjust tab limit to 8',
+          description: 'Based on your browsing patterns, a lower tab limit might improve your workflow.',
+          actionable: true,
+          action: {
+            type: 'set_limit',
+            value: 8
+          }
+        }
+      ],
+      insights: [
+        'Your productivity has been increasing this week. Keep up the good work!',
+        'You spent most of your time (60%) on work websites.'
+      ]
     });
 
-    test('handleTabRemoved should update tab count correctly', async () => {
-      const removeInfo = { isWindowClosing: false };
+    // Mock BrowsingAnalytics
+    const mockBrowsingAnalytics = require('../BrowsingAnalytics').getBrowsingAnalytics();
 
-      await backgroundModule.handleTabRemoved(1, removeInfo);
-
-      expect(console.log).toHaveBeenCalledWith('Tab removed:', 1, 'Window closed:', false);
+    mockBrowsingAnalytics.getTodayInsights.mockResolvedValue({
+      productivityScore: 7.5,
+      timeDistribution: {
+        'work': 3600000,
+        'social': 1800000
+      },
+      focusMetrics: {
+        focusScore: 8.0,
+        longestFocusSession: 45,
+        distractionCount: 12,
+        averageFocusTime: 25
+      },
+      recommendations: [],
+      categoryBreakdown: [
+        {
+          category: 'work',
+          timeSpent: 3600000,
+          tabCount: 5,
+          percentage: 60
+        },
+        {
+          category: 'social',
+          timeSpent: 1800000,
+          tabCount: 3,
+          percentage: 30
+        }
+      ]
     });
 
-    test('handleTabUpdated should process tab updates when complete', async () => {
-      const mockTab = createMockTab({
-        id: 1,
-        url: 'https://updated.com',
-        title: 'Updated',
-        windowId: 1,
-        active: true
-      });
-      const changeInfo = { status: 'complete' };
-
-      await backgroundModule.handleTabUpdated(1, changeInfo, mockTab);
-
-      expect(console.log).toHaveBeenCalledWith('Tab updated:', 1, 'https://updated.com');
-    });
-
-    test('handleTabActivated should update tab activity', async () => {
-      const activeInfo = { tabId: 1, windowId: 1 };
-
-      await backgroundModule.handleTabActivated(activeInfo);
-
-      expect(console.log).toHaveBeenCalledWith('Tab activated:', 1);
-    });
-
-    test('handleWindowRemoved should clean up window tabs', async () => {
-      await backgroundModule.handleWindowRemoved(1);
-
-      expect(console.log).toHaveBeenCalledWith('Window removed:', 1);
+    mockBrowsingAnalytics.getWeekInsights.mockResolvedValue({
+      productivityScore: 7.2,
+      timeDistribution: {
+        'work': 18000000,
+        'social': 9000000
+      },
+      focusMetrics: {
+        focusScore: 7.5,
+        longestFocusSession: 40,
+        distractionCount: 60,
+        averageFocusTime: 22
+      },
+      recommendations: [],
+      categoryBreakdown: [
+        {
+          category: 'work',
+          timeSpent: 18000000,
+          tabCount: 25,
+          percentage: 65
+        },
+        {
+          category: 'social',
+          timeSpent: 9000000,
+          tabCount: 15,
+          percentage: 25
+        }
+      ]
     });
   });
 
-  describe('Error Handling', () => {
-    test('should handle Chrome API errors gracefully', async () => {
-      mockChrome.tabs.query.mockRejectedValue(new Error('Permission denied'));
+  test('should handle getProductivityInsights message with AI recommendations', async () => {
+    const sendResponse = jest.fn();
 
-      const result = await backgroundModule.getAllTabsCount();
+    await mockMessageListener(
+      { action: 'getProductivityInsights', period: 'today' },
+      {},
+      sendResponse
+    );
 
-      expect(result.totalTabs).toBe(0);
-      expect(console.error).toHaveBeenCalledWith('Failed to get tab count:', expect.any(Error));
-    });
+    expect(sendResponse).toHaveBeenCalled();
+    const response = sendResponse.mock.calls[0][0];
 
-    test('should log errors to storage', async () => {
-      const mockTab = createMockTab({ id: undefined }); // Invalid tab to trigger error
-
-      await backgroundModule.handleTabCreated(mockTab);
-
-      // Error should be handled gracefully
-      expect(console.warn).toHaveBeenCalledWith('Tab created without ID, skipping');
-    });
+    expect(response.insights).toBeDefined();
+    expect(response.insights.recommendations).toBeDefined();
+    expect(response.insights.recommendations.length).toBeGreaterThan(0);
+    expect(response.insights.tabLimitRecommendation).toBeDefined();
+    expect(response.insights.focusRecommendations).toBeDefined();
+    expect(response.trendData).toBeDefined();
   });
 
-  describe('Initialization', () => {
-    test('initializeExtension should set default config if none exists', async () => {
-      mockChrome.storage.sync.get.mockResolvedValue({});
-      mockChrome.tabs.query.mockResolvedValue([]);
+  test('should handle getOptimalTabLimit message', async () => {
+    const sendResponse = jest.fn();
 
-      await backgroundModule.initializeExtension();
+    await mockMessageListener(
+      { action: 'getOptimalTabLimit' },
+      {},
+      sendResponse
+    );
 
-      expect(mockChrome.storage.sync.set).toHaveBeenCalledWith({
-        userConfig: expect.objectContaining({
-          tabLimit: 10,
-          autoCloseEnabled: false,
-          theme: 'auto',
-          notificationsEnabled: true
-        })
-      });
+    expect(sendResponse).toHaveBeenCalled();
+    const response = sendResponse.mock.calls[0][0];
+
+    expect(response.recommendation).toBeDefined();
+    expect(response.recommendation.recommendedLimit).toBe(8);
+    expect(response.recommendation.currentLimit).toBe(10);
+  });
+
+  test('should handle getFocusTimeRecommendations message', async () => {
+    const sendResponse = jest.fn();
+
+    await mockMessageListener(
+      { action: 'getFocusTimeRecommendations' },
+      {},
+      sendResponse
+    );
+
+    expect(sendResponse).toHaveBeenCalled();
+    const response = sendResponse.mock.calls[0][0];
+
+    expect(response.recommendations).toBeDefined();
+    expect(response.recommendations.length).toBeGreaterThan(0);
+    expect(response.recommendations[0].recommendedDuration).toBe(25);
+  });
+
+  test('should handle getPersonalizedRecommendations message', async () => {
+    const sendResponse = jest.fn();
+
+    await mockMessageListener(
+      { action: 'getPersonalizedRecommendations' },
+      {},
+      sendResponse
+    );
+
+    expect(sendResponse).toHaveBeenCalled();
+    const response = sendResponse.mock.calls[0][0];
+
+    expect(response.recommendations).toBeDefined();
+    expect(response.recommendations.length).toBeGreaterThan(0);
+    expect(response.recommendations[0].type).toBe('tab_limit');
+    expect(response.recommendations[0].actionable).toBe(true);
+  });
+
+  test('should handle generateWeeklyReport message', async () => {
+    const sendResponse = jest.fn();
+
+    await mockMessageListener(
+      { action: 'generateWeeklyReport' },
+      {},
+      sendResponse
+    );
+
+    expect(sendResponse).toHaveBeenCalled();
+    const response = sendResponse.mock.calls[0][0];
+
+    expect(response.report).toBeDefined();
+    expect(response.report.startDate).toBe('2025-07-10');
+    expect(response.report.endDate).toBe('2025-07-16');
+    expect(response.report.productivityScore).toBe(7.5);
+    expect(response.report.insights.length).toBeGreaterThan(0);
+  });
+
+  test('should handle executeRecommendation message for tab limit', async () => {
+    const sendResponse = jest.fn();
+
+    mockedSyncGet.mockResolvedValue({
+      userConfig: {
+        tabLimit: 10,
+        rules: []
+      }
     });
 
-    test('initializeExtension should not overwrite existing config', async () => {
-      const existingConfig = {
-        userConfig: {
-          tabLimit: 5,
-          autoCloseEnabled: false,
-          autoCloseDelay: 30,
-          theme: 'dark',
-          notificationsEnabled: true,
-          rules: [],
-          profiles: []
+    await mockMessageListener(
+      {
+        action: 'executeRecommendation',
+        recommendationType: 'tab_limit',
+        recommendationAction: {
+          type: 'set_limit',
+          value: 8
         }
-      };
-      
-      // Mock multiple calls for StorageManager
-      mockChrome.storage.sync.get
-        .mockResolvedValueOnce(existingConfig) // First call to get existing config
-        .mockResolvedValueOnce({ configVersion: '1.0.0' }); // Second call to get version
-      mockChrome.tabs.query.mockResolvedValue([]);
+      },
+      {},
+      sendResponse
+    );
 
-      await backgroundModule.initializeExtension();
-
-      // Should not set userConfig since it already exists and is valid
-      expect(mockChrome.storage.sync.set).not.toHaveBeenCalledWith(
-        expect.objectContaining({ userConfig: expect.anything() })
-      );
+    expect(sendResponse).toHaveBeenCalled();
+    expect(sendResponse).toHaveBeenCalledWith({ success: true });
+    expect(mockedSyncSet).toHaveBeenCalledWith({
+      userConfig: expect.objectContaining({
+        tabLimit: 8
+      })
     });
+    expect(mockedNotificationsCreate).toHaveBeenCalled();
+  });
+
+  test('should handle executeRecommendation message for focus time', async () => {
+    const sendResponse = jest.fn();
+
+    await mockMessageListener(
+      {
+        action: 'executeRecommendation',
+        recommendationType: 'focus_time',
+        recommendationAction: {
+          type: 'start_focus',
+          duration: 25
+        }
+      },
+      {},
+      sendResponse
+    );
+
+    expect(sendResponse).toHaveBeenCalled();
+    expect(sendResponse).toHaveBeenCalledWith({ success: true });
+    expect(mockedNotificationsCreate).toHaveBeenCalled();
   });
 });

@@ -83,6 +83,40 @@ export interface MemoryMetrics {
 
 export type WebsiteCategory = 'work' | 'social' | 'entertainment' | 'news' | 'shopping' | 'other';
 
+export interface WebsiteCategoryDetails {
+  category: WebsiteCategory;
+  productivityScore: number; // 0-10 scale
+  patterns: string[]; // Domain patterns for matching
+  color: string; // Color for UI representation
+}
+
+export interface ProductivityInsights {
+  productivityScore: number; // 0-10 scale
+  timeDistribution: {[category: string]: number}; // Time spent per category in milliseconds
+  focusMetrics: FocusMetrics;
+  recommendations: string[];
+  categoryBreakdown?: CategoryBreakdown[]; // Optional detailed breakdown
+  // Additional properties for enhanced insights
+  focusRecommendations?: any[]; // Focus time recommendations
+  fullRecommendations?: any[]; // Complete recommendation objects
+  tabLimitRecommendation?: any; // Tab limit recommendation
+  trendData?: { dates: string[], scores: number[] }; // Trend data for visualization
+}
+
+export interface FocusMetrics {
+  focusScore: number; // 0-10 scale
+  longestFocusSession: number; // minutes
+  distractionCount: number;
+  averageFocusTime: number; // minutes
+}
+
+export interface CategoryBreakdown {
+  category: WebsiteCategory;
+  timeSpent: number; // milliseconds
+  tabCount: number;
+  percentage: number; // 0-100
+}
+
 export interface SubscriptionPlan {
   id: string;
   name: string;

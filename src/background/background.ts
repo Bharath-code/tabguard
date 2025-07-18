@@ -8,6 +8,8 @@ import { TabSuggestionEngine } from './TabSuggestionEngine';
 import { AutoCloseManager } from './AutoCloseManager';
 import { RuleEngine } from './RuleEngine';
 import { FocusModeManager } from './FocusModeManager';
+import { BrowsingAnalytics } from './BrowsingAnalytics';
+import { RecommendationEngine } from './RecommendationEngine';
 
 console.log('TabGuard Pro background service worker loaded');
 
@@ -19,6 +21,8 @@ const storageManager = new StorageManager();
 const autoCloseManager = new AutoCloseManager(tabActivityTracker, tabSuggestionEngine);
 const ruleEngine = new RuleEngine(tabActivityTracker);
 const focusModeManager = new FocusModeManager(ruleEngine);
+const browsingAnalytics = new BrowsingAnalytics(tabActivityTracker);
+const recommendationEngine = new RecommendationEngine(tabActivityTracker, browsingAnalytics);
 
 interface TabCountResult {
     totalTabs: number;
@@ -89,19 +93,19 @@ async function initializeExtension(): Promise<void> {
 
         // Initialize tab count and metadata
         await initializeTabTracking();
-        
+
         // Initialize AutoCloseManager and RuleEngine with user configuration
         const { userConfig } = await chrome.storage.sync.get('userConfig');
         if (userConfig) {
             await autoCloseManager.initialize(userConfig);
             console.log('AutoCloseManager initialized successfully');
-            
+
             // Initialize RuleEngine with rules from user config
             if (userConfig.rules && Array.isArray(userConfig.rules)) {
                 ruleEngine.setRules(userConfig.rules);
                 console.log(`RuleEngine initialized with ${userConfig.rules.length} rules`);
             }
-            
+
             // Initialize FocusModeManager
             await focusModeManager.initialize();
             console.log('FocusModeManager initialized successfully');
@@ -291,6 +295,14 @@ export function getFocusModeManager(): FocusModeManager {
     return focusModeManager;
 }
 
+export function getBrowsingAnalytics(): BrowsingAnalytics {
+    return browsingAnalytics;
+}
+
+export function getRecommendationEngine(): RecommendationEngine {
+    return recommendationEngine;
+}
+
 // Error logging utility
 async function logError(context: string, error: any, metadata?: any): Promise<void> {
     try {
@@ -368,9 +380,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                             prioritizeLowProductivity: message.prioritizeLowProductivity !== false,
                             excludeWorkTabs: message.excludeWorkTabs !== false
                         };
-                        
+
                         const scoredSuggestions = await tabSuggestionEngine.getSuggestions(criteria);
-                        
+
                         // Format suggestions for UI display
                         const suggestions = scoredSuggestions.map(suggestion => ({
                             tabId: suggestion.tabId,
@@ -526,7 +538,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 // Auto-close functionality message handlers
                 case 'getAutoCloseOptions':
                     try {
@@ -537,24 +549,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'updateAutoCloseOptions':
                     try {
                         if (message.options) {
                             autoCloseManager.updateOptions(message.options);
-                            
+
                             // Also update user config in storage
                             const { userConfig } = await chrome.storage.sync.get('userConfig');
                             if (userConfig) {
-                                const updatedConfig = { 
-                                    ...userConfig, 
+                                const updatedConfig = {
+                                    ...userConfig,
                                     autoCloseEnabled: message.options.enabled !== undefined ? message.options.enabled : userConfig.autoCloseEnabled,
                                     autoCloseDelay: message.options.inactivityThreshold !== undefined ? message.options.inactivityThreshold : userConfig.autoCloseDelay
                                 };
                                 await chrome.storage.sync.set({ userConfig: updatedConfig });
                                 tabManager.updateConfig(updatedConfig);
                             }
-                            
+
                             sendResponse({ success: true });
                         } else {
                             sendResponse({ success: false, error: 'No options provided' });
@@ -564,7 +576,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'getWhitelist':
                     try {
                         const whitelist = autoCloseManager.getWhitelist();
@@ -574,7 +586,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'addToWhitelist':
                     try {
                         if (message.entry) {
@@ -588,7 +600,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'removeFromWhitelist':
                     try {
                         if (message.type && message.value) {
@@ -602,7 +614,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'getClosedTabs':
                     try {
                         const closedTabs = autoCloseManager.getClosedTabs();
@@ -612,7 +624,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'undoLastClosure':
                     try {
                         const success = await autoCloseManager.undoLastClosure();
@@ -622,7 +634,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'cancelPendingClosures':
                     try {
                         autoCloseManager.cancelPendingClosures();
@@ -632,7 +644,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 // Rule Engine message handlers
                 case 'getRules':
                     try {
@@ -643,23 +655,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'setRules':
                     try {
                         if (message.rules && Array.isArray(message.rules)) {
                             ruleEngine.setRules(message.rules);
-                            
+
                             // Also update user config in storage
                             const { userConfig } = await chrome.storage.sync.get('userConfig');
                             if (userConfig) {
-                                const updatedConfig = { 
-                                    ...userConfig, 
+                                const updatedConfig = {
+                                    ...userConfig,
                                     rules: message.rules
                                 };
                                 await chrome.storage.sync.set({ userConfig: updatedConfig });
                                 tabManager.updateConfig(updatedConfig);
                             }
-                            
+
                             sendResponse({ success: true });
                         } else {
                             sendResponse({ success: false, error: 'No rules provided or invalid format' });
@@ -669,7 +681,557 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
+
+                // Browsing Analytics message handlers
+                case 'getProductivityInsights':
+                    try {
+                        const period = message.period || 'today';
+                        let insights;
+
+                        if (period === 'today') {
+                            insights = await browsingAnalytics.getTodayInsights();
+                        } else if (period === 'week') {
+                            insights = await browsingAnalytics.getWeekInsights();
+                        } else if (period === 'month') {
+                            // Get the first and last day of the current month
+                            const now = new Date();
+                            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+                            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                            insights = await browsingAnalytics.getDateRangeInsights(firstDay, lastDay);
+                        } else if (message.startDate && message.endDate) {
+                            insights = await browsingAnalytics.getDateRangeInsights(
+                                new Date(message.startDate),
+                                new Date(message.endDate)
+                            );
+                        } else {
+                            insights = await browsingAnalytics.getTodayInsights();
+                        }
+                        
+                        // Enhance insights with AI-powered recommendations
+                        const recommendations = await recommendationEngine.getPersonalizedRecommendations(insights);
+                        insights.recommendations = recommendations.map(rec => rec.description);
+                        
+                        // Include full recommendation data for advanced UI features
+                        insights.fullRecommendations = recommendations;
+                        
+                        // Get optimal tab limit recommendation
+                        const tabLimitRec = await recommendationEngine.getOptimalTabLimit(insights);
+                        insights.tabLimitRecommendation = tabLimitRec;
+                        
+                        // Get focus time recommendations
+                        const focusRecs = await recommendationEngine.getFocusTimeRecommendations(insights);
+                        insights.focusRecommendations = focusRecs;
+                        
+                        // Get trend data for visualization
+                        let trendData: { dates: string[], scores: number[] } = { dates: [], scores: [] };
+                        
+                        // For today, get hourly trend
+                        if (period === 'today') {
+                            const now = new Date();
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            
+                            // Create sample data if no hourly data available
+                            const hours = [];
+                            for (let i = 0; i <= now.getHours(); i++) {
+                                const date = new Date(today);
+                                date.setHours(i);
+                                hours.push(date);
+                            }
+                            
+                            trendData = {
+                                dates: hours.map(d => d.toISOString()),
+                                scores: hours.map(() => insights.productivityScore)
+                            };
+                        } 
+                        // For week, get daily trend
+                        else if (period === 'week') {
+                            const now = new Date();
+                            const startOfWeek = new Date(now);
+                            startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+                            startOfWeek.setHours(0, 0, 0, 0);
+                            
+                            const days = [];
+                            for (let i = 0; i <= 6; i++) {
+                                const date = new Date(startOfWeek);
+                                date.setDate(startOfWeek.getDate() + i);
+                                if (date <= now) {
+                                    days.push(date);
+                                }
+                            }
+                            
+                            trendData = {
+                                dates: days.map(d => d.toISOString()),
+                                scores: days.map(() => insights.productivityScore)
+                            };
+                        }
+                        // For month, get weekly trend
+                        else if (period === 'month') {
+                            const now = new Date();
+                            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                            
+                            // Create a weekly trend
+                            const weeks = [];
+                            let currentWeekStart = new Date(startOfMonth);
+                            while (currentWeekStart <= now) {
+                                weeks.push(new Date(currentWeekStart));
+                                currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+                            }
+                            
+                            trendData = {
+                                dates: weeks.map(w => w.toISOString()),
+                                scores: weeks.map(() => insights.productivityScore)
+                            };
+                        }
+                        
+                        insights.trendData = trendData;
+                        
+                        sendResponse({ insights, trendData });
+                    } catch (error) {
+                        console.error('Error getting productivity insights:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
                     
+                case 'getOptimalTabLimit':
+                    try {
+                        // Get current insights
+                        const insights = await browsingAnalytics.getTodayInsights();
+                        
+                        // Get optimal tab limit recommendation
+                        const tabLimitRec = await recommendationEngine.getOptimalTabLimit(insights);
+                        
+                        sendResponse({ recommendation: tabLimitRec });
+                    } catch (error) {
+                        console.error('Error getting optimal tab limit:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'getFocusTimeRecommendations':
+                    try {
+                        // Get current insights
+                        const insights = await browsingAnalytics.getTodayInsights();
+                        
+                        // Get focus time recommendations
+                        const focusRecs = await recommendationEngine.getFocusTimeRecommendations(insights);
+                        
+                        sendResponse({ recommendations: focusRecs });
+                    } catch (error) {
+                        console.error('Error getting focus time recommendations:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'getPersonalizedRecommendations':
+                    try {
+                        // Get current insights
+                        const insights = await browsingAnalytics.getTodayInsights();
+                        
+                        // Get personalized recommendations
+                        const recommendations = await recommendationEngine.getPersonalizedRecommendations(insights);
+                        
+                        sendResponse({ recommendations });
+                    } catch (error) {
+                        console.error('Error getting personalized recommendations:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'generateWeeklyReport':
+                    try {
+                        // Generate weekly report
+                        const report = await recommendationEngine.generateWeeklyReport();
+                        
+                        sendResponse({ report });
+                    } catch (error) {
+                        console.error('Error generating weekly report:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'executeRecommendation':
+                    try {
+                        const recommendationType = message.recommendationType;
+                        const recommendationAction = message.recommendationAction;
+                        
+                        if (!recommendationType || !recommendationAction) {
+                            sendResponse({ success: false, error: 'Missing recommendation details' });
+                            break;
+                        }
+                        
+                        // Handle different recommendation types
+                        switch (recommendationType) {
+                            case 'tab_limit':
+                                if (recommendationAction.type === 'set_limit' && recommendationAction.value) {
+                                    // Update tab limit in user config
+                                    const { userConfig } = await chrome.storage.sync.get('userConfig');
+                                    if (userConfig) {
+                                        const updatedConfig = {
+                                            ...userConfig,
+                                            tabLimit: recommendationAction.value
+                                        };
+                                        await chrome.storage.sync.set({ userConfig: updatedConfig });
+                                        tabManager.updateConfig(updatedConfig);
+                                        
+                                        // Show notification
+                                        chrome.notifications.create({
+                                            type: 'basic',
+                                            iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                                            title: 'Tab Limit Updated',
+                                            message: `Tab limit has been set to ${recommendationAction.value}`,
+                                            priority: 1
+                                        });
+                                        
+                                        sendResponse({ success: true });
+                                    } else {
+                                        sendResponse({ success: false, error: 'User config not found' });
+                                    }
+                                }
+                                break;
+                                
+                            case 'focus_time':
+                                if (recommendationAction.type === 'start_focus' && recommendationAction.duration) {
+                                    // Start focus mode
+                                    await focusModeManager.startFocusMode(recommendationAction.duration);
+                                    
+                                    // Show notification
+                                    chrome.notifications.create({
+                                        type: 'basic',
+                                        iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                                        title: 'Focus Mode Started',
+                                        message: `Focus mode activated for ${recommendationAction.duration} minutes`,
+                                        priority: 1
+                                    });
+                                    
+                                    sendResponse({ success: true });
+                                }
+                                break;
+                                
+                            case 'break_reminder':
+                                if (recommendationAction.type === 'take_break' && recommendationAction.duration) {
+                                    // Schedule a break reminder
+                                    const breakDuration = recommendationAction.duration;
+                                    
+                                    // Show notification
+                                    chrome.notifications.create({
+                                        type: 'basic',
+                                        iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                                        title: 'Break Time',
+                                        message: `Time for a ${breakDuration}-minute break to refresh your focus`,
+                                        priority: 1
+                                    });
+                                    
+                                    // Schedule end of break notification
+                                    setTimeout(() => {
+                                        chrome.notifications.create({
+                                            type: 'basic',
+                                            iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                                            title: 'Break Ended',
+                                            message: 'Your break time is over. Ready to get back to work?',
+                                            priority: 1
+                                        });
+                                    }, breakDuration * 60 * 1000);
+                                    
+                                    sendResponse({ success: true });
+                                }
+                                break;
+                                
+                            case 'close_tabs':
+                                if (recommendationAction.type === 'close_tabs') {
+                                    // Get inactive tabs
+                                    const inactiveTabs = tabActivityTracker.getInactiveTabs(30); // 30 minutes threshold
+                                    
+                                    if (inactiveTabs.length > 0) {
+                                        // Get tab IDs to close (max 5)
+                                        const tabsToClose = inactiveTabs
+                                            .slice(0, 5)
+                                            .map(tab => tab.tabId);
+                                            
+                                        // Close tabs
+                                        await chrome.tabs.remove(tabsToClose);
+                                        
+                                        // Show notification
+                                        chrome.notifications.create({
+                                            type: 'basic',
+                                            iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                                            title: 'Tabs Closed',
+                                            message: `Closed ${tabsToClose.length} inactive tabs to improve performance`,
+                                            priority: 1
+                                        });
+                                        
+                                        sendResponse({ success: true, closed: tabsToClose.length });
+                                    } else {
+                                        sendResponse({ success: false, message: 'No inactive tabs to close' });
+                                    }
+                                }
+                                break;
+                                
+                            case 'category_limit':
+                                if (recommendationAction.type === 'set_category_limit' && recommendationAction.value) {
+                                    const category = recommendationAction.value;
+                                    
+                                    // Create a rule for this category
+                                    const { userConfig } = await chrome.storage.sync.get('userConfig');
+                                    if (userConfig && userConfig.rules) {
+                                        // Create a new rule
+                                        const newRule = {
+                                            id: `auto-${Date.now()}`,
+                                            name: `Auto-generated ${category} limit`,
+                                            condition: {
+                                                type: 'category',
+                                                operator: 'equals',
+                                                value: category
+                                            },
+                                            action: {
+                                                type: 'limit_tabs',
+                                                value: 3 // Default to 3 tabs for this category
+                                            },
+                                            priority: 10,
+                                            enabled: true
+                                        };
+                                        
+                                        // Add the rule
+                                        const updatedRules = [...userConfig.rules, newRule];
+                                        const updatedConfig = {
+                                            ...userConfig,
+                                            rules: updatedRules
+                                        };
+                                        
+                                        // Save to storage
+                                        await chrome.storage.sync.set({ userConfig: updatedConfig });
+                                        
+                                        // Update rule engine
+                                        ruleEngine.setRules(updatedRules);
+                                        
+                                        // Show notification
+                                        chrome.notifications.create({
+                                            type: 'basic',
+                                            iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                                            title: 'Category Limit Created',
+                                            message: `Created a limit for ${category} websites`,
+                                            priority: 1
+                                        });
+                                        
+                                        sendResponse({ success: true });
+                                    } else {
+                                        sendResponse({ success: false, error: 'User config not found' });
+                                    }
+                                }
+                                break;
+                                
+                            default:
+                                sendResponse({ success: false, error: 'Unknown recommendation type' });
+                        }
+                    } catch (error) {
+                        console.error('Error executing recommendation:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'exportProductivityReport':
+                    try {
+                        const period = message.period || 'week';
+                        
+                        // Get insights based on period
+                        let insights;
+                        let reportTitle;
+                        let dateRange;
+                        
+                        if (period === 'today') {
+                            insights = await browsingAnalytics.getTodayInsights();
+                            reportTitle = 'Daily Productivity Report';
+                            const today = new Date();
+                            dateRange = today.toLocaleDateString();
+                        } else if (period === 'week') {
+                            insights = await browsingAnalytics.getWeekInsights();
+                            reportTitle = 'Weekly Productivity Report';
+                            const now = new Date();
+                            const startOfWeek = new Date(now);
+                            startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+                            const endOfWeek = new Date(startOfWeek);
+                            endOfWeek.setDate(startOfWeek.getDate() + 6);
+                            dateRange = `${startOfWeek.toLocaleDateString()} - ${endOfWeek.toLocaleDateString()}`;
+                        } else if (period === 'month') {
+                            const now = new Date();
+                            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+                            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                            insights = await browsingAnalytics.getDateRangeInsights(firstDay, lastDay);
+                            reportTitle = 'Monthly Productivity Report';
+                            dateRange = `${firstDay.toLocaleDateString()} - ${lastDay.toLocaleDateString()}`;
+                        }
+                        
+                        if (!insights) {
+                            throw new Error('No insights data available for report');
+                        }
+                        
+                        // Create report content
+                        const reportContent = {
+                            title: reportTitle,
+                            generatedAt: new Date().toLocaleString(),
+                            dateRange,
+                            productivityScore: insights.productivityScore,
+                            focusMetrics: insights.focusMetrics,
+                            categoryBreakdown: insights.categoryBreakdown,
+                            recommendations: insights.recommendations,
+                            trendData: insights.trendData
+                        };
+                        
+                        // Create a downloadable report
+                        const reportBlob = new Blob(
+                            [JSON.stringify(reportContent, null, 2)], 
+                            { type: 'application/json' }
+                        );
+                        
+                        // Create download URL
+                        const url = URL.createObjectURL(reportBlob);
+                        
+                        // Create and trigger download
+                        const filename = `tabguard-${period}-report-${new Date().toISOString().split('T')[0]}.json`;
+                        
+                        await chrome.downloads.download({
+                            url,
+                            filename,
+                            saveAs: true
+                        });
+                        
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Error exporting productivity report:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'getProductivityTrend':
+                    try {
+                        const period = message.period || 'week';
+                        let trendData: { dates: string[], scores: number[] } = { dates: [], scores: [] };
+
+                        // For today, get hourly trend
+                        if (period === 'today') {
+                            const now = new Date();
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            
+                            // Create sample data if no hourly data available
+                            const hours = [];
+                            for (let i = 0; i <= now.getHours(); i++) {
+                                const date = new Date(today);
+                                date.setHours(i);
+                                hours.push(date);
+                            }
+                            
+                            // Use current productivity score for all hours as placeholder
+                            const insights = await browsingAnalytics.getTodayInsights();
+                            trendData = {
+                                dates: hours.map(d => d.toISOString()),
+                                scores: hours.map(() => insights.productivityScore)
+                            };
+                        } 
+                        // For week, get daily trend
+                        else if (period === 'week') {
+                            const now = new Date();
+                            const startOfWeek = new Date(now);
+                            startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+                            startOfWeek.setHours(0, 0, 0, 0);
+                            
+                            const days = [];
+                            for (let i = 0; i <= 6; i++) {
+                                const date = new Date(startOfWeek);
+                                date.setDate(startOfWeek.getDate() + i);
+                                if (date <= now) {
+                                    days.push(date);
+                                }
+                            }
+                            
+                            // Use current weekly insights for all days as placeholder
+                            const insights = await browsingAnalytics.getWeekInsights();
+                            trendData = {
+                                dates: days.map(d => d.toISOString()),
+                                scores: days.map(() => insights.productivityScore)
+                            };
+                        }
+                        // For month, get weekly trend
+                        else if (period === 'month') {
+                            const now = new Date();
+                            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                            
+                            // Create a weekly trend
+                            const weeks = [];
+                            let currentWeekStart = new Date(startOfMonth);
+                            while (currentWeekStart <= now) {
+                                weeks.push(new Date(currentWeekStart));
+                                currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+                            }
+                            
+                            // Use monthly insights for all weeks as placeholder
+                            const insights = await browsingAnalytics.getDateRangeInsights(
+                                startOfMonth, 
+                                new Date(now.getFullYear(), now.getMonth() + 1, 0)
+                            );
+                            trendData = {
+                                dates: weeks.map(w => w.toISOString()),
+                                scores: weeks.map(() => insights.productivityScore)
+                            };
+                        }
+
+                        sendResponse({ trendData });
+                    } catch (error) {
+                        console.error('Error getting productivity trend:', error);
+                        sendResponse({
+                            error: String(error),
+                            trendData: { dates: [], scores: [] }
+                        });
+                    }
+                    break;
+                case 'getCategoryDetails':
+                    try {
+                        const categoryDetails = browsingAnalytics.getCategoryDetails();
+                        sendResponse({ categoryDetails });
+                    } catch (error) {
+                        console.error('Error getting category details:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'updateCategoryDetails':
+                    try {
+                        if (message.categoryDetails) {
+                            browsingAnalytics.updateCategoryDetails(message.categoryDetails);
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'No category details provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error updating category details:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'categorizeWebsite':
+                    try {
+                        if (message.url) {
+                            const category = browsingAnalytics.categorizeWebsite(message.url);
+                            sendResponse({ category });
+                        } else {
+                            sendResponse({ success: false, error: 'No URL provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error categorizing website:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'analyzeBrowsingData':
+                    try {
+                        await browsingAnalytics.analyzeBrowsingData();
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Error analyzing browsing data:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
                 case 'evaluateRulesForTab':
                     try {
                         if (message.tabId) {
@@ -678,9 +1240,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                             const context = await ruleEngine.createContextFromTab(tab, tabCount);
                             const results = ruleEngine.evaluateRules(context);
                             const resolvedActions = ruleEngine.resolveConflicts(results);
-                            
-                            sendResponse({ 
-                                results, 
+
+                            sendResponse({
+                                results,
                                 resolvedActions,
                                 conflicts: ruleEngine.getConflicts(),
                                 context
@@ -693,7 +1255,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 // Focus Mode message handlers
                 case 'getFocusModeSettings':
                     try {
@@ -704,7 +1266,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'updateFocusModeSettings':
                     try {
                         if (message.settings) {
@@ -718,7 +1280,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'startFocusMode':
                     try {
                         const success = await focusModeManager.startFocusMode(
@@ -731,7 +1293,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'stopFocusMode':
                     try {
                         const success = await focusModeManager.stopFocusMode();
@@ -741,7 +1303,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'isFocusModeActive':
                     try {
                         const active = focusModeManager.isFocusModeActive();
@@ -751,7 +1313,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ active: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'grantTemporaryAccess':
                     try {
                         if (message.domain) {
@@ -765,7 +1327,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'getScheduledSessions':
                     try {
                         const sessions = focusModeManager.getScheduledSessions();
@@ -775,7 +1337,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'addScheduledSession':
                     try {
                         if (message.session) {
@@ -789,7 +1351,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'updateScheduledSession':
                     try {
                         if (message.id && message.updates) {
@@ -803,7 +1365,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'deleteScheduledSession':
                     try {
                         if (message.id) {
@@ -817,7 +1379,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'getTimeBasedRules':
                     try {
                         const rules = focusModeManager.getTimeBasedRules();
@@ -827,7 +1389,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'addTimeBasedRule':
                     try {
                         if (message.rule) {
@@ -841,7 +1403,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'updateTimeBasedRule':
                     try {
                         if (message.id && message.updates) {
@@ -855,7 +1417,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'deleteTimeBasedRule':
                     try {
                         if (message.id) {
@@ -869,7 +1431,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'getTabLimitForDomain':
                     try {
                         if (message.url) {
@@ -881,7 +1443,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                             } catch (urlError) {
                                 console.error('Error parsing URL:', urlError);
                             }
-                            
+
                             const tabCount = await tabManager.getCurrentTabCount();
                             const context = {
                                 url: message.url,
@@ -893,7 +1455,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                 category: RuleEngine.categorizeUrl(message.url),
                                 isActive: true
                             };
-                            
+
                             const limit = ruleEngine.getTabLimitForContext(context, message.defaultLimit || 25);
                             sendResponse({ limit, domain, category: context.category });
                         } else {

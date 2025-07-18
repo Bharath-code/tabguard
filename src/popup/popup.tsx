@@ -4,6 +4,7 @@ import { UserConfig, TabSuggestion } from '@/shared/types';
 import TabCounter from './components/TabCounter';
 import QuickActions from './components/QuickActions';
 import TabSuggestions from './components/TabSuggestions';
+import ProductivityWidget from './components/ProductivityWidget';
 import './popup.css';
 
 // Define CSS variables for Tailwind classes that might not be processed
@@ -359,6 +360,10 @@ const PopupApp: React.FC = () => {
           currentCount={currentTabCount} 
           tabLimit={tabLimit} 
         />
+      </div>
+
+      <div style={{ marginBottom: '16px' }}>
+        <ProductivityWidget compact={true} />
       </div>
 
       <div style={{ marginBottom: 'auto' }}>

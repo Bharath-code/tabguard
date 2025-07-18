@@ -22,6 +22,9 @@
   "author": "TabGuard Pro Team",
   "license": "MIT",
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/chrome": "^0.0.246",
     "@types/jest": "^29.5.5",
     "@types/node": "^20.6.3",
