@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { WebsiteCategory } from '../../shared/types';
+import PremiumFeature from '../../shared/components/PremiumFeature';
 
 interface TabSuggestionItem {
   tabId: number;
@@ -40,36 +41,57 @@ const TabSuggestions: React.FC<TabSuggestionsProps> = ({ onClose, onCancel, isOp
       setLoading(true);
       setError(null);
 
+      // Check if the background script is available
+      if (chrome.runtime.lastError) {
+        console.warn('Background script not ready:', chrome.runtime.lastError);
+        setError('Background service not ready. Please try again later.');
+        setSuggestions([]);
+        setSelectedTabs(new Set());
+        return;
+      }
+
       // Get suggestions from background script
-      const response = await chrome.runtime.sendMessage({
-        action: 'getSuggestedTabs',
-        maxSuggestions: 5,
-        minInactivityMinutes: 30,
-        includePinnedTabs: false,
-        prioritizeMemoryUsage: true,
-        prioritizeLowProductivity: true,
-        excludeWorkTabs: true
-      });
+      try {
+        const response = await chrome.runtime.sendMessage({
+          action: 'getSuggestedTabs',
+          maxSuggestions: 5,
+          minInactivityMinutes: 30,
+          includePinnedTabs: false,
+          prioritizeMemoryUsage: true,
+          prioritizeLowProductivity: true,
+          excludeWorkTabs: true
+        }).catch(err => {
+          console.warn('Error communicating with background script:', err);
+          return { suggestions: [] };
+        });
 
-      if (response && Array.isArray(response.suggestions)) {
-        // Add selected property to each suggestion
-        const suggestionsWithSelection = response.suggestions.map((suggestion: TabSuggestionItem) => ({
-          ...suggestion,
-          selected: true
-        }));
+        if (response && Array.isArray(response.suggestions)) {
+          // Add selected property to each suggestion
+          const suggestionsWithSelection = response.suggestions.map((suggestion: TabSuggestionItem) => ({
+            ...suggestion,
+            selected: true
+          }));
 
-        setSuggestions(suggestionsWithSelection);
+          setSuggestions(suggestionsWithSelection);
 
-        // Initialize all tabs as selected
-        const tabIds = new Set<number>(suggestionsWithSelection.map((s: { tabId: any; }) => s.tabId));
-        setSelectedTabs(tabIds);
-      } else {
+          // Initialize all tabs as selected
+          const tabIds = new Set<number>(suggestionsWithSelection.map((s: { tabId: any; }) => s.tabId));
+          setSelectedTabs(tabIds);
+        } else {
+          setSuggestions([]);
+          setSelectedTabs(new Set());
+        }
+      } catch (communicationError) {
+        console.error('Failed to communicate with background script:', communicationError);
+        setError('Failed to communicate with background service. Please try again later.');
         setSuggestions([]);
         setSelectedTabs(new Set());
       }
     } catch (error) {
       console.error('Failed to load tab suggestions:', error);
       setError('Failed to load suggestions. Please try again.');
+      setSuggestions([]);
+      setSelectedTabs(new Set());
     } finally {
       setLoading(false);
     }
@@ -199,82 +221,92 @@ const TabSuggestions: React.FC<TabSuggestionsProps> = ({ onClose, onCancel, isOp
         </div>
 
         <div className="overflow-y-auto flex-grow p-4">
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            </div>
-          ) : error ? (
-            <div className="text-center text-red-500 p-4">
-              {error}
-            </div>
-          ) : suggestions.length === 0 ? (
-            <div className="text-center text-gray-500 dark:text-gray-400 p-4">
-              No suggestions available. All your tabs appear to be active.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {suggestions.map((suggestion) => (
-                <div
-                  key={suggestion.tabId}
-                  className={`border rounded-lg p-3 flex items-start ${suggestion.selected
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20'
-                      : 'border-gray-200 dark:border-gray-700'
-                    }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={suggestion.selected}
-                    onChange={() => handleToggleTab(suggestion.tabId)}
-                    className="h-5 w-5 text-blue-600 rounded mr-3 mt-0.5"
-                  />
+          <PremiumFeature 
+            featureId="ai_insights"
+            upgradeMessage="Smart tab suggestions require a premium subscription"
+            fallback={
+              <div className="text-center text-gray-500 dark:text-gray-400 p-4">
+                Upgrade to Premium to get AI-powered tab suggestions based on your browsing habits.
+              </div>
+            }
+          >
+            {loading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              </div>
+            ) : error ? (
+              <div className="text-center text-red-500 p-4">
+                {error}
+              </div>
+            ) : suggestions.length === 0 ? (
+              <div className="text-center text-gray-500 dark:text-gray-400 p-4">
+                No suggestions available. All your tabs appear to be active.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {suggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.tabId}
+                    className={`border rounded-lg p-3 flex items-start ${suggestion.selected
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20'
+                        : 'border-gray-200 dark:border-gray-700'
+                      }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={suggestion.selected}
+                      onChange={() => handleToggleTab(suggestion.tabId)}
+                      className="h-5 w-5 text-blue-600 rounded mr-3 mt-0.5"
+                    />
 
-                  <div className="flex-grow min-w-0">
-                    <div className="flex items-center mb-1">
-                      <div className="flex-shrink-0">
-                        {suggestion.isPinned && (
-                          <span className="inline-flex items-center mr-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
-                            <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                            </svg>
-                            Pinned
-                          </span>
-                        )}
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-center mb-1">
+                        <div className="flex-shrink-0">
+                          {suggestion.isPinned && (
+                            <span className="inline-flex items-center mr-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                              <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                              </svg>
+                              Pinned
+                            </span>
+                          )}
+                        </div>
+
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(suggestion.category)}`}>
+                          {getCategoryIcon(suggestion.category)}
+                          <span className="ml-1 capitalize">{suggestion.category}</span>
+                        </span>
                       </div>
 
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(suggestion.category)}`}>
-                        {getCategoryIcon(suggestion.category)}
-                        <span className="ml-1 capitalize">{suggestion.category}</span>
-                      </span>
-                    </div>
+                      <h3 className="font-medium text-gray-900 dark:text-white truncate">
+                        {suggestion.title || 'Untitled Tab'}
+                      </h3>
 
-                    <h3 className="font-medium text-gray-900 dark:text-white truncate">
-                      {suggestion.title || 'Untitled Tab'}
-                    </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {suggestion.url}
+                      </p>
 
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {suggestion.url}
-                    </p>
+                      <div className="flex items-center mt-2 text-xs text-gray-500 dark:text-gray-400 space-x-3">
+                        <div className="flex items-center">
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {suggestion.formattedLastAccessed}
+                        </div>
 
-                    <div className="flex items-center mt-2 text-xs text-gray-500 dark:text-gray-400 space-x-3">
-                      <div className="flex items-center">
-                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        {suggestion.formattedLastAccessed}
-                      </div>
-
-                      <div className="flex items-center">
-                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                        {suggestion.formattedMemoryUsage}
+                        <div className="flex items-center">
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          {suggestion.formattedMemoryUsage}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </PremiumFeature>
         </div>
 
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between">

@@ -60,8 +60,9 @@ export class TabManager {
      * Returns whether a new tab should be allowed
      * 
      * This method now supports rule-based tab limits via the RuleEngine
+     * and subscription-based limits via the SubscriptionManager
      */
-    async enforceTabLimit(limit?: number, tab?: chrome.tabs.Tab, ruleEngine?: any): Promise<TabLimitResult> {
+    async enforceTabLimit(limit?: number, tab?: chrome.tabs.Tab, ruleEngine?: any, subscriptionManager?: any): Promise<TabLimitResult> {
         try {
             // Reload config to get latest settings
             await this.loadConfiguration();
@@ -69,6 +70,23 @@ export class TabManager {
             // Default limit from config
             let effectiveLimit = limit || this.config?.tabLimit || 25;
             const currentCount = await this.getCurrentTabCount();
+            
+            // If SubscriptionManager is provided, check subscription-based limits
+            if (subscriptionManager) {
+                try {
+                    // Get subscription-based tab limit
+                    const subscriptionLimit = await subscriptionManager.getTabLimit();
+                    
+                    // Use subscription limit if it's more restrictive than the configured limit
+                    if (subscriptionLimit < effectiveLimit) {
+                        console.log(`Subscription-based tab limit applied: ${subscriptionLimit}`);
+                        effectiveLimit = subscriptionLimit;
+                    }
+                } catch (subscriptionError) {
+                    console.error('Error applying subscription-based tab limits:', subscriptionError);
+                    // Continue with default limit on subscription evaluation error
+                }
+            }
             
             // If RuleEngine and tab are provided, check for domain-specific limits
             if (ruleEngine && tab && tab.url) {

@@ -11,6 +11,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { ProductivityInsights, CategoryBreakdown, WebsiteCategory } from '../../shared/types';
+import PremiumFeature from '../../shared/components/PremiumFeature';
 
 interface ProductivityWidgetProps {
   period?: 'today' | 'week' | 'custom';
@@ -309,22 +310,42 @@ const ProductivityWidget: React.FC<ProductivityWidgetProps> = ({
             Productivity Score
           </h3>
           <div className="flex items-center">
-            <div 
-              className={`text-lg font-bold ${
-                insights.productivityScore >= 7 ? 'text-green-500' : 
-                insights.productivityScore >= 4 ? 'text-yellow-500' : 'text-red-500'
-              }`}
+            <PremiumFeature 
+              featureId="ai_insights" 
+              compact={true}
+              fallback={
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Basic score
+                </div>
+              }
             >
-              {insights.productivityScore.toFixed(1)}/10
-            </div>
+              <div 
+                className={`text-lg font-bold ${
+                  insights.productivityScore >= 7 ? 'text-green-500' : 
+                  insights.productivityScore >= 4 ? 'text-yellow-500' : 'text-red-500'
+                }`}
+              >
+                {insights.productivityScore.toFixed(1)}/10
+              </div>
+            </PremiumFeature>
           </div>
         </div>
         
-        {insights.recommendations && insights.recommendations.length > 0 && (
-          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-            <p>{insights.recommendations[0]}</p>
-          </div>
-        )}
+        <PremiumFeature 
+          featureId="ai_insights" 
+          showUpgradePrompt={false}
+          fallback={
+            <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+              <p>Upgrade to Premium for AI-powered productivity insights</p>
+            </div>
+          }
+        >
+          {insights.recommendations && insights.recommendations.length > 0 && (
+            <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+              <p>{insights.recommendations[0]}</p>
+            </div>
+          )}
+        </PremiumFeature>
       </div>
     );
   }
@@ -340,38 +361,48 @@ const ProductivityWidget: React.FC<ProductivityWidgetProps> = ({
              periodSelector === 'week' ? 'This Week\'s' : 
              'Monthly'} Productivity
           </h3>
-          <div className="mt-1 flex space-x-2">
-            <button 
-              onClick={() => setPeriodSelector('today')}
-              className={`px-2 py-1 text-xs rounded ${
-                periodSelector === 'today' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              Today
-            </button>
-            <button 
-              onClick={() => setPeriodSelector('week')}
-              className={`px-2 py-1 text-xs rounded ${
-                periodSelector === 'week' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              Week
-            </button>
-            <button 
-              onClick={() => setPeriodSelector('month')}
-              className={`px-2 py-1 text-xs rounded ${
-                periodSelector === 'month' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              Month
-            </button>
-          </div>
+          <PremiumFeature 
+            featureId="ai_insights" 
+            showUpgradePrompt={false}
+            fallback={
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Upgrade to Premium for detailed insights
+              </div>
+            }
+          >
+            <div className="mt-1 flex space-x-2">
+              <button 
+                onClick={() => setPeriodSelector('today')}
+                className={`px-2 py-1 text-xs rounded ${
+                  periodSelector === 'today' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                Today
+              </button>
+              <button 
+                onClick={() => setPeriodSelector('week')}
+                className={`px-2 py-1 text-xs rounded ${
+                  periodSelector === 'week' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                Week
+              </button>
+              <button 
+                onClick={() => setPeriodSelector('month')}
+                className={`px-2 py-1 text-xs rounded ${
+                  periodSelector === 'month' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                Month
+              </button>
+            </div>
+          </PremiumFeature>
         </div>
         <div 
           className={`text-2xl font-bold ${
@@ -385,96 +416,147 @@ const ProductivityWidget: React.FC<ProductivityWidgetProps> = ({
       
       {/* Trend visualization */}
       {trendData.dates.length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Productivity Trend
-          </h4>
-          <div className="h-32 w-full bg-gray-50 dark:bg-gray-900 rounded p-2">
-            <div className="relative h-full w-full">
-              {/* Simple trend visualization */}
-              <div className="flex items-end justify-between h-full w-full">
-                {trendData.scores.map((score, index) => {
-                  const height = `${Math.max(5, score * 10)}%`;
-                  const color = score >= 7 ? '#4CAF50' : score >= 4 ? '#FF9800' : '#F44336';
-                  
-                  return (
-                    <div key={index} className="flex flex-col items-center flex-1">
-                      <div 
-                        className="w-full mx-0.5 rounded-t" 
-                        style={{ 
-                          height, 
-                          backgroundColor: color,
-                          maxWidth: '20px'
-                        }}
-                      ></div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate" style={{fontSize: '0.65rem'}}>
-                        {new Date(trendData.dates[index]).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+        <PremiumFeature 
+          featureId="ai_insights"
+          upgradeMessage="Productivity trends require a premium subscription"
+          fallback={
+            <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Upgrade to Premium to view your productivity trends over time
+                </p>
               </div>
-              
-              {/* Horizontal lines for reference */}
-              <div className="absolute top-1/4 left-0 right-0 border-t border-dashed border-gray-300 dark:border-gray-700"></div>
-              <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-gray-300 dark:border-gray-700"></div>
-              <div className="absolute top-3/4 left-0 right-0 border-t border-dashed border-gray-300 dark:border-gray-700"></div>
+            </div>
+          }
+        >
+          <div className="mb-6">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Productivity Trend
+            </h4>
+            <div className="h-32 w-full bg-gray-50 dark:bg-gray-900 rounded p-2">
+              <div className="relative h-full w-full">
+                {/* Simple trend visualization */}
+                <div className="flex items-end justify-between h-full w-full">
+                  {trendData.scores.map((score, index) => {
+                    const height = `${Math.max(5, score * 10)}%`;
+                    const color = score >= 7 ? '#4CAF50' : score >= 4 ? '#FF9800' : '#F44336';
+                    
+                    return (
+                      <div key={index} className="flex flex-col items-center flex-1">
+                        <div 
+                          className="w-full mx-0.5 rounded-t" 
+                          style={{ 
+                            height, 
+                            backgroundColor: color,
+                            maxWidth: '20px'
+                          }}
+                        ></div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate" style={{fontSize: '0.65rem'}}>
+                          {new Date(trendData.dates[index]).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Horizontal lines for reference */}
+                <div className="absolute top-1/4 left-0 right-0 border-t border-dashed border-gray-300 dark:border-gray-700"></div>
+                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-gray-300 dark:border-gray-700"></div>
+                <div className="absolute top-3/4 left-0 right-0 border-t border-dashed border-gray-300 dark:border-gray-700"></div>
+              </div>
             </div>
           </div>
-        </div>
+        </PremiumFeature>
       )}
       
       {/* Category breakdown */}
       {insights.categoryBreakdown && insights.categoryBreakdown.length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Time Distribution
-          </h4>
-          <div className="space-y-2">
-            {insights.categoryBreakdown.map((category, index) => (
-              <div key={index} className="flex flex-col">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="capitalize">{category.category}</span>
-                  <span>{formatTime(category.timeSpent)} ({Math.round(category.percentage)}%)</span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div 
-                    className="h-2 rounded-full" 
-                    style={{
-                      width: `${category.percentage}%`,
-                      backgroundColor: getCategoryColor(category.category)
-                    }}
-                  ></div>
-                </div>
+        <PremiumFeature 
+          featureId="ai_insights"
+          upgradeMessage="Detailed time distribution requires a premium subscription"
+          fallback={
+            <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Upgrade to Premium to see how you spend your browsing time
+                </p>
               </div>
-            ))}
+            </div>
+          }
+        >
+          <div className="mb-6">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Time Distribution
+            </h4>
+            <div className="space-y-2">
+              {insights.categoryBreakdown.map((category, index) => (
+                <div key={index} className="flex flex-col">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="capitalize">{category.category}</span>
+                    <span>{formatTime(category.timeSpent)} ({Math.round(category.percentage)}%)</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="h-2 rounded-full" 
+                      style={{
+                        width: `${category.percentage}%`,
+                        backgroundColor: getCategoryColor(category.category)
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </PremiumFeature>
       )}
       
       {/* Focus metrics */}
       {insights.focusMetrics && (
-        <div className="mb-6 grid grid-cols-2 gap-2">
-          <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Focus Score</div>
-            <div className="font-medium">{insights.focusMetrics.focusScore.toFixed(1)}/10</div>
+        <PremiumFeature 
+          featureId="ai_insights"
+          upgradeMessage="Focus metrics require a premium subscription"
+          fallback={
+            <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Upgrade to Premium to track your focus metrics and improve productivity
+                </p>
+              </div>
+            </div>
+          }
+        >
+          <div className="mb-6 grid grid-cols-2 gap-2">
+            <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Focus Score</div>
+              <div className="font-medium">{insights.focusMetrics.focusScore.toFixed(1)}/10</div>
+            </div>
+            <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Longest Focus</div>
+              <div className="font-medium">{insights.focusMetrics.longestFocusSession} min</div>
+            </div>
+            <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Distractions</div>
+              <div className="font-medium">{insights.focusMetrics.distractionCount}</div>
+            </div>
+            <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Avg Focus Time</div>
+              <div className="font-medium">{insights.focusMetrics.averageFocusTime} min</div>
+            </div>
           </div>
-          <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Longest Focus</div>
-            <div className="font-medium">{insights.focusMetrics.longestFocusSession} min</div>
-          </div>
-          <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Distractions</div>
-            <div className="font-medium">{insights.focusMetrics.distractionCount}</div>
-          </div>
-          <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Avg Focus Time</div>
-            <div className="font-medium">{insights.focusMetrics.averageFocusTime} min</div>
-          </div>
-        </div>
+        </PremiumFeature>
       )}
       
       {/* Productivity Goals */}

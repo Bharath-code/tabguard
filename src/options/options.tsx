@@ -5,6 +5,7 @@ import { StorageManager } from '@/shared/StorageManager';
 import RuleManager from './components/RuleManager';
 import ProfileManager from './components/ProfileManager';
 import FocusScheduler from './components/FocusScheduler';
+import SubscriptionPanel from './components/SubscriptionPanel';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -588,31 +589,20 @@ const OptionsApp: React.FC = () => {
           </div>
         </section>
 
-        {/* Premium Features Placeholder */}
+        {/* Subscription Panel */}
         <section style={{
           padding: '16px',
           backgroundColor: '#f8f9fa',
           borderRadius: '8px',
           border: '1px solid #e8eaed'
         }} className="dark:bg-gray-800 dark:border-gray-700">
-          <h2 style={{ fontSize: '18px', marginBottom: '12px' }} className="dark:text-gray-200">Premium Features</h2>
-          <p style={{ margin: '0 0 12px 0', color: '#666' }} className="dark:text-gray-400">
-            Unlock advanced tab management with AI-powered insights, custom rules, and team features.
-          </p>
-          <button
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#1a73e8',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
+          <SubscriptionPanel 
+            onUpgrade={(planId) => {
+              // After upgrading, we need to reload the configuration
+              // as the tab limit may have changed
+              loadConfiguration();
             }}
-            className="dark:bg-blue-600 dark:hover:bg-blue-700"
-            disabled
-          >
-            Upgrade to Premium (Coming Soon)
-          </button>
+          />
         </section>
       </div>
 

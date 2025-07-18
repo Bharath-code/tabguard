@@ -5,6 +5,7 @@ import TabCounter from './components/TabCounter';
 import QuickActions from './components/QuickActions';
 import TabSuggestions from './components/TabSuggestions';
 import ProductivityWidget from './components/ProductivityWidget';
+import SubscriptionStatus from './components/SubscriptionStatus';
 import './popup.css';
 
 // Define CSS variables for Tailwind classes that might not be processed
@@ -67,9 +68,22 @@ const PopupApp: React.FC = () => {
 
       // Get tab suggestions from background script
       try {
-        const response = await chrome.runtime.sendMessage({ action: 'getSuggestedTabs' });
-        if (response && Array.isArray(response.suggestions)) {
-          setTabSuggestions(response.suggestions);
+        // Check if the background script is available
+        if (chrome.runtime.lastError) {
+          console.warn('Background script not ready:', chrome.runtime.lastError);
+          setTabSuggestions([]);
+        } else {
+          const response = await chrome.runtime.sendMessage({ action: 'getSuggestedTabs' })
+            .catch(err => {
+              console.warn('Error communicating with background script:', err);
+              return { suggestions: [] };
+            });
+            
+          if (response && Array.isArray(response.suggestions)) {
+            setTabSuggestions(response.suggestions);
+          } else {
+            setTabSuggestions([]);
+          }
         }
       } catch (error) {
         console.error('Failed to get tab suggestions:', error);
@@ -354,6 +368,10 @@ const PopupApp: React.FC = () => {
           {error}
         </div>
       )}
+      
+      <div style={{ marginBottom: '12px' }}>
+        <SubscriptionStatus />
+      </div>
 
       <div style={{ marginBottom: '16px' }}>
         <TabCounter 

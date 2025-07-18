@@ -10,6 +10,9 @@ import { RuleEngine } from './RuleEngine';
 import { FocusModeManager } from './FocusModeManager';
 import { BrowsingAnalytics } from './BrowsingAnalytics';
 import { RecommendationEngine } from './RecommendationEngine';
+import { SubscriptionManager } from './SubscriptionManager';
+// Import message handlers
+import { registerMessageHandlers } from './messageHandlers';
 
 console.log('TabGuard Pro background service worker loaded');
 
@@ -23,11 +26,69 @@ const ruleEngine = new RuleEngine(tabActivityTracker);
 const focusModeManager = new FocusModeManager(ruleEngine);
 const browsingAnalytics = new BrowsingAnalytics(tabActivityTracker);
 const recommendationEngine = new RecommendationEngine(tabActivityTracker, browsingAnalytics);
+const subscriptionManager = new SubscriptionManager(storageManager);
 
 interface TabCountResult {
     totalTabs: number;
     tabsByWindow: Map<number, number>;
 }
+
+// Register message handlers immediately to ensure they're available
+// This ensures critical functions like getSuggestedTabs are always available
+registerMessageHandlers(
+    tabManager,
+    tabActivityTracker,
+    tabSuggestionEngine,
+    storageManager,
+    autoCloseManager,
+    ruleEngine,
+    focusModeManager,
+    browsingAnalytics,
+    recommendationEngine,
+    subscriptionManager
+);
+console.log('Message handlers registered on load');
+
+// Add a direct message handler for critical functions to ensure they're always available
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'getSuggestedTabs') {
+        (async () => {
+            try {
+                const criteria = {
+                    maxSuggestions: message.maxSuggestions || 5,
+                    minInactivityMinutes: message.minInactivityMinutes || 30,
+                    includePinnedTabs: message.includePinnedTabs || false,
+                    prioritizeMemoryUsage: message.prioritizeMemoryUsage !== false,
+                    prioritizeLowProductivity: message.prioritizeLowProductivity !== false,
+                    excludeWorkTabs: message.excludeWorkTabs !== false
+                };
+
+                const scoredSuggestions = await tabSuggestionEngine.getSuggestions(criteria);
+
+                // Format suggestions for UI display
+                const suggestions = scoredSuggestions.map(suggestion => ({
+                    tabId: suggestion.tabId,
+                    title: suggestion.title,
+                    url: suggestion.url,
+                    lastAccessed: suggestion.lastAccessed,
+                    memoryUsage: suggestion.memoryUsage,
+                    productivityScore: suggestion.productivityScore,
+                    closureScore: suggestion.closureScore,
+                    formattedLastAccessed: TabSuggestionEngine.formatTimeSinceLastAccess(suggestion.lastAccessed),
+                    formattedMemoryUsage: TabSuggestionEngine.formatMemoryUsage(suggestion.memoryUsage),
+                    category: suggestion.category,
+                    isPinned: suggestion.isPinned
+                }));
+
+                sendResponse({ suggestions });
+            } catch (error) {
+                console.error('Error getting suggested tabs:', error);
+                sendResponse({ suggestions: [] });
+            }
+        })();
+        return true; // Required to use sendResponse asynchronously
+    }
+});
 
 // Initialize extension on startup
 chrome.runtime.onStartup.addListener(() => {
@@ -91,6 +152,10 @@ async function initializeExtension(): Promise<void> {
         await storageManager.initialize();
         console.log('StorageManager initialized successfully');
 
+        // Initialize SubscriptionManager
+        await subscriptionManager.initialize();
+        console.log('SubscriptionManager initialized successfully');
+
         // Initialize tab count and metadata
         await initializeTabTracking();
 
@@ -110,6 +175,21 @@ async function initializeExtension(): Promise<void> {
             await focusModeManager.initialize();
             console.log('FocusModeManager initialized successfully');
         }
+
+        // Register message handlers
+        registerMessageHandlers(
+            tabManager,
+            tabActivityTracker,
+            tabSuggestionEngine,
+            storageManager,
+            autoCloseManager,
+            ruleEngine,
+            focusModeManager,
+            browsingAnalytics,
+            recommendationEngine,
+            subscriptionManager
+        );
+        console.log('Message handlers registered successfully');
 
         console.log('Extension initialized successfully');
     } catch (error) {
@@ -175,8 +255,8 @@ async function handleTabCreated(tab: chrome.tabs.Tab): Promise<void> {
         // Add tab to TabActivityTracker
         tabActivityTracker.trackTab(tab);
 
-        // Enforce tab limit using TabManager with RuleEngine integration
-        const limitResult = await tabManager.enforceTabLimit(undefined, tab, ruleEngine);
+        // Enforce tab limit using TabManager with RuleEngine and SubscriptionManager integration
+        const limitResult = await tabManager.enforceTabLimit(undefined, tab, ruleEngine, subscriptionManager);
 
         if (!limitResult.allowed) {
             console.log(`Tab limit enforcement: ${limitResult.message}`);
@@ -303,6 +383,10 @@ export function getRecommendationEngine(): RecommendationEngine {
     return recommendationEngine;
 }
 
+export function getSubscriptionManager(): SubscriptionManager {
+    return subscriptionManager;
+}
+
 // Error logging utility
 async function logError(context: string, error: any, metadata?: any): Promise<void> {
     try {
@@ -329,7 +413,9 @@ async function logError(context: string, error: any, metadata?: any): Promise<vo
     }
 }
 
-// Message handlers for UI interactions
+// Message handlers are now registered in messageHandlers.ts
+// The following code is kept for reference but is no longer active
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     (async () => {
         try {
@@ -683,6 +769,235 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                     break;
 
                 // Browsing Analytics message handlers
+                // Subscription Manager message handlers
+                case 'getCurrentPlan':
+                    try {
+                        const plan = await subscriptionManager.getCurrentPlan();
+                        sendResponse({ plan });
+                    } catch (error) {
+                        console.error('Error getting current plan:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'hasFeatureAccess':
+                    try {
+                        if (message.featureId) {
+                            const hasAccess = await subscriptionManager.hasFeatureAccess(message.featureId);
+                            sendResponse({ hasAccess });
+                        } else {
+                            sendResponse({ hasAccess: false, error: 'No feature ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error checking feature access:', error);
+                        sendResponse({ hasAccess: false, error: String(error) });
+                    }
+                    break;
+                    
+                case 'getAvailableFeatures':
+                    try {
+                        const features = await subscriptionManager.getAvailableFeatures();
+                        sendResponse({ features });
+                    } catch (error) {
+                        console.error('Error getting available features:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+                    
+                case 'getSubscriptionState':
+                    try {
+                        const state = subscriptionManager.getSubscriptionState();
+                        sendResponse({ state });
+                    } catch (error) {
+                        console.error('Error getting subscription state:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                // DoDo Payment Integration message handlers
+                case 'createCheckoutSession':
+                    try {
+                        if (message.planId) {
+                            const checkoutSession = await subscriptionManager.createCheckoutSession(
+                                message.planId,
+                                message.customerEmail
+                            );
+                            
+                            if (checkoutSession) {
+                                sendResponse({ success: true, checkoutSession });
+                            } else {
+                                sendResponse({ success: false, error: 'Failed to create checkout session' });
+                            }
+                        } else {
+                            sendResponse({ success: false, error: 'No plan ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error creating checkout session:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'processPaymentSuccess':
+                    try {
+                        if (message.sessionId) {
+                            const success = await subscriptionManager.processPaymentSuccess(message.sessionId);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No session ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error processing payment success:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'processPaymentFailure':
+                    try {
+                        if (message.sessionId) {
+                            await subscriptionManager.processPaymentFailure(message.sessionId, message.errorCode);
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'No session ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error processing payment failure:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'cancelSubscription':
+                    try {
+                        const cancelImmediately = message.cancelImmediately === true;
+                        const success = await subscriptionManager.cancelSubscription(cancelImmediately);
+                        sendResponse({ success });
+                    } catch (error) {
+                        console.error('Error cancelling subscription:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'changeSubscriptionPlan':
+                    try {
+                        if (message.planId) {
+                            const success = await subscriptionManager.changeSubscriptionPlan(message.planId);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No plan ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error changing subscription plan:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'hasActiveSubscription':
+                    try {
+                        const hasSubscription = await subscriptionManager.hasActiveSubscription();
+                        sendResponse({ hasSubscription });
+                    } catch (error) {
+                        console.error('Error checking active subscription:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getSubscriptionState':
+                    try {
+                        const state = subscriptionManager.getSubscriptionState();
+                        sendResponse({ state });
+                    } catch (error) {
+                        console.error('Error getting subscription state:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getAvailablePlans':
+                    try {
+                        const plans = subscriptionManager.getAvailablePlans();
+                        sendResponse({ plans });
+                    } catch (error) {
+                        console.error('Error getting available plans:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getAvailableFeatures':
+                    try {
+                        const features = await subscriptionManager.getAvailableFeatures();
+                        sendResponse({ features });
+                    } catch (error) {
+                        console.error('Error getting available features:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'hasFeatureAccess':
+                    try {
+                        if (message.featureId) {
+                            const hasAccess = await subscriptionManager.hasFeatureAccess(message.featureId);
+                            sendResponse({ hasAccess });
+                        } else {
+                            sendResponse({ hasAccess: false, error: 'No feature ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error checking feature access:', error);
+                        sendResponse({ hasAccess: false, error: String(error) });
+                    }
+                    break;
+
+                case 'getAvailableFeatures':
+                    try {
+                        const features = await subscriptionManager.getAvailableFeatures();
+                        sendResponse({ features });
+                    } catch (error) {
+                        console.error('Error getting available features:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getTabLimit':
+                    try {
+                        const tabLimit = await subscriptionManager.getTabLimit();
+                        sendResponse({ tabLimit });
+                    } catch (error) {
+                        console.error('Error getting tab limit:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'upgradeSubscription':
+                    try {
+                        if (message.planId) {
+                            const success = await subscriptionManager.upgradeSubscription(message.planId);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No plan ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error upgrading subscription:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'validateSubscription':
+                    try {
+                        const isValid = await subscriptionManager.validateSubscription();
+                        sendResponse({ isValid });
+                    } catch (error) {
+                        console.error('Error validating subscription:', error);
+                        sendResponse({ isValid: false, error: String(error) });
+                    }
+                    break;
+
+                case 'getAvailablePlans':
+                    try {
+                        const plans = subscriptionManager.getAvailablePlans();
+                        sendResponse({ plans });
+                    } catch (error) {
+                        console.error('Error getting available plans:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
                 case 'getProductivityInsights':
                     try {
                         const period = message.period || 'today';
@@ -706,31 +1021,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         } else {
                             insights = await browsingAnalytics.getTodayInsights();
                         }
-                        
+
                         // Enhance insights with AI-powered recommendations
                         const recommendations = await recommendationEngine.getPersonalizedRecommendations(insights);
                         insights.recommendations = recommendations.map(rec => rec.description);
-                        
+
                         // Include full recommendation data for advanced UI features
                         insights.fullRecommendations = recommendations;
-                        
+
                         // Get optimal tab limit recommendation
                         const tabLimitRec = await recommendationEngine.getOptimalTabLimit(insights);
                         insights.tabLimitRecommendation = tabLimitRec;
-                        
+
                         // Get focus time recommendations
                         const focusRecs = await recommendationEngine.getFocusTimeRecommendations(insights);
                         insights.focusRecommendations = focusRecs;
-                        
+
                         // Get trend data for visualization
                         let trendData: { dates: string[], scores: number[] } = { dates: [], scores: [] };
-                        
+
                         // For today, get hourly trend
                         if (period === 'today') {
                             const now = new Date();
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
-                            
+
                             // Create sample data if no hourly data available
                             const hours = [];
                             for (let i = 0; i <= now.getHours(); i++) {
@@ -738,19 +1053,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                 date.setHours(i);
                                 hours.push(date);
                             }
-                            
+
                             trendData = {
                                 dates: hours.map(d => d.toISOString()),
                                 scores: hours.map(() => insights.productivityScore)
                             };
-                        } 
+                        }
                         // For week, get daily trend
                         else if (period === 'week') {
                             const now = new Date();
                             const startOfWeek = new Date(now);
                             startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
                             startOfWeek.setHours(0, 0, 0, 0);
-                            
+
                             const days = [];
                             for (let i = 0; i <= 6; i++) {
                                 const date = new Date(startOfWeek);
@@ -759,7 +1074,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                     days.push(date);
                                 }
                             }
-                            
+
                             trendData = {
                                 dates: days.map(d => d.toISOString()),
                                 scores: days.map(() => insights.productivityScore)
@@ -769,7 +1084,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         else if (period === 'month') {
                             const now = new Date();
                             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                            
+
                             // Create a weekly trend
                             const weeks = [];
                             let currentWeekStart = new Date(startOfMonth);
@@ -777,89 +1092,89 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                 weeks.push(new Date(currentWeekStart));
                                 currentWeekStart.setDate(currentWeekStart.getDate() + 7);
                             }
-                            
+
                             trendData = {
                                 dates: weeks.map(w => w.toISOString()),
                                 scores: weeks.map(() => insights.productivityScore)
                             };
                         }
-                        
+
                         insights.trendData = trendData;
-                        
+
                         sendResponse({ insights, trendData });
                     } catch (error) {
                         console.error('Error getting productivity insights:', error);
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'getOptimalTabLimit':
                     try {
                         // Get current insights
                         const insights = await browsingAnalytics.getTodayInsights();
-                        
+
                         // Get optimal tab limit recommendation
                         const tabLimitRec = await recommendationEngine.getOptimalTabLimit(insights);
-                        
+
                         sendResponse({ recommendation: tabLimitRec });
                     } catch (error) {
                         console.error('Error getting optimal tab limit:', error);
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'getFocusTimeRecommendations':
                     try {
                         // Get current insights
                         const insights = await browsingAnalytics.getTodayInsights();
-                        
+
                         // Get focus time recommendations
                         const focusRecs = await recommendationEngine.getFocusTimeRecommendations(insights);
-                        
+
                         sendResponse({ recommendations: focusRecs });
                     } catch (error) {
                         console.error('Error getting focus time recommendations:', error);
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'getPersonalizedRecommendations':
                     try {
                         // Get current insights
                         const insights = await browsingAnalytics.getTodayInsights();
-                        
+
                         // Get personalized recommendations
                         const recommendations = await recommendationEngine.getPersonalizedRecommendations(insights);
-                        
+
                         sendResponse({ recommendations });
                     } catch (error) {
                         console.error('Error getting personalized recommendations:', error);
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'generateWeeklyReport':
                     try {
                         // Generate weekly report
                         const report = await recommendationEngine.generateWeeklyReport();
-                        
+
                         sendResponse({ report });
                     } catch (error) {
                         console.error('Error generating weekly report:', error);
                         sendResponse({ error: String(error) });
                     }
                     break;
-                    
+
                 case 'executeRecommendation':
                     try {
                         const recommendationType = message.recommendationType;
                         const recommendationAction = message.recommendationAction;
-                        
+
                         if (!recommendationType || !recommendationAction) {
                             sendResponse({ success: false, error: 'Missing recommendation details' });
                             break;
                         }
-                        
+
                         // Handle different recommendation types
                         switch (recommendationType) {
                             case 'tab_limit':
@@ -873,7 +1188,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                         };
                                         await chrome.storage.sync.set({ userConfig: updatedConfig });
                                         tabManager.updateConfig(updatedConfig);
-                                        
+
                                         // Show notification
                                         chrome.notifications.create({
                                             type: 'basic',
@@ -882,19 +1197,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                             message: `Tab limit has been set to ${recommendationAction.value}`,
                                             priority: 1
                                         });
-                                        
+
                                         sendResponse({ success: true });
                                     } else {
                                         sendResponse({ success: false, error: 'User config not found' });
                                     }
                                 }
                                 break;
-                                
+
                             case 'focus_time':
                                 if (recommendationAction.type === 'start_focus' && recommendationAction.duration) {
                                     // Start focus mode
                                     await focusModeManager.startFocusMode(recommendationAction.duration);
-                                    
+
                                     // Show notification
                                     chrome.notifications.create({
                                         type: 'basic',
@@ -903,16 +1218,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                         message: `Focus mode activated for ${recommendationAction.duration} minutes`,
                                         priority: 1
                                     });
-                                    
+
                                     sendResponse({ success: true });
                                 }
                                 break;
-                                
+
                             case 'break_reminder':
                                 if (recommendationAction.type === 'take_break' && recommendationAction.duration) {
                                     // Schedule a break reminder
                                     const breakDuration = recommendationAction.duration;
-                                    
+
                                     // Show notification
                                     chrome.notifications.create({
                                         type: 'basic',
@@ -921,7 +1236,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                         message: `Time for a ${breakDuration}-minute break to refresh your focus`,
                                         priority: 1
                                     });
-                                    
+
                                     // Schedule end of break notification
                                     setTimeout(() => {
                                         chrome.notifications.create({
@@ -932,25 +1247,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                             priority: 1
                                         });
                                     }, breakDuration * 60 * 1000);
-                                    
+
                                     sendResponse({ success: true });
                                 }
                                 break;
-                                
+
                             case 'close_tabs':
                                 if (recommendationAction.type === 'close_tabs') {
                                     // Get inactive tabs
                                     const inactiveTabs = tabActivityTracker.getInactiveTabs(30); // 30 minutes threshold
-                                    
+
                                     if (inactiveTabs.length > 0) {
                                         // Get tab IDs to close (max 5)
                                         const tabsToClose = inactiveTabs
                                             .slice(0, 5)
                                             .map(tab => tab.tabId);
-                                            
+
                                         // Close tabs
                                         await chrome.tabs.remove(tabsToClose);
-                                        
+
                                         // Show notification
                                         chrome.notifications.create({
                                             type: 'basic',
@@ -959,18 +1274,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                             message: `Closed ${tabsToClose.length} inactive tabs to improve performance`,
                                             priority: 1
                                         });
-                                        
+
                                         sendResponse({ success: true, closed: tabsToClose.length });
                                     } else {
                                         sendResponse({ success: false, message: 'No inactive tabs to close' });
                                     }
                                 }
                                 break;
-                                
+
                             case 'category_limit':
                                 if (recommendationAction.type === 'set_category_limit' && recommendationAction.value) {
                                     const category = recommendationAction.value;
-                                    
+
                                     // Create a rule for this category
                                     const { userConfig } = await chrome.storage.sync.get('userConfig');
                                     if (userConfig && userConfig.rules) {
@@ -990,20 +1305,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                             priority: 10,
                                             enabled: true
                                         };
-                                        
+
                                         // Add the rule
                                         const updatedRules = [...userConfig.rules, newRule];
                                         const updatedConfig = {
                                             ...userConfig,
                                             rules: updatedRules
                                         };
-                                        
+
                                         // Save to storage
                                         await chrome.storage.sync.set({ userConfig: updatedConfig });
-                                        
+
                                         // Update rule engine
                                         ruleEngine.setRules(updatedRules);
-                                        
+
                                         // Show notification
                                         chrome.notifications.create({
                                             type: 'basic',
@@ -1012,14 +1327,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                             message: `Created a limit for ${category} websites`,
                                             priority: 1
                                         });
-                                        
+
                                         sendResponse({ success: true });
                                     } else {
                                         sendResponse({ success: false, error: 'User config not found' });
                                     }
                                 }
                                 break;
-                                
+
                             default:
                                 sendResponse({ success: false, error: 'Unknown recommendation type' });
                         }
@@ -1028,16 +1343,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         sendResponse({ success: false, error: String(error) });
                     }
                     break;
-                    
+
                 case 'exportProductivityReport':
                     try {
                         const period = message.period || 'week';
-                        
+
                         // Get insights based on period
                         let insights;
                         let reportTitle;
                         let dateRange;
-                        
+
                         if (period === 'today') {
                             insights = await browsingAnalytics.getTodayInsights();
                             reportTitle = 'Daily Productivity Report';
@@ -1060,11 +1375,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                             reportTitle = 'Monthly Productivity Report';
                             dateRange = `${firstDay.toLocaleDateString()} - ${lastDay.toLocaleDateString()}`;
                         }
-                        
+
                         if (!insights) {
                             throw new Error('No insights data available for report');
                         }
-                        
+
                         // Create report content
                         const reportContent = {
                             title: reportTitle,
@@ -1076,25 +1391,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                             recommendations: insights.recommendations,
                             trendData: insights.trendData
                         };
-                        
+
                         // Create a downloadable report
                         const reportBlob = new Blob(
-                            [JSON.stringify(reportContent, null, 2)], 
+                            [JSON.stringify(reportContent, null, 2)],
                             { type: 'application/json' }
                         );
-                        
+
                         // Create download URL
                         const url = URL.createObjectURL(reportBlob);
-                        
+
                         // Create and trigger download
                         const filename = `tabguard-${period}-report-${new Date().toISOString().split('T')[0]}.json`;
-                        
+
                         await chrome.downloads.download({
                             url,
                             filename,
                             saveAs: true
                         });
-                        
+
                         sendResponse({ success: true });
                     } catch (error) {
                         console.error('Error exporting productivity report:', error);
@@ -1112,7 +1427,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                             const now = new Date();
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
-                            
+
                             // Create sample data if no hourly data available
                             const hours = [];
                             for (let i = 0; i <= now.getHours(); i++) {
@@ -1120,21 +1435,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                 date.setHours(i);
                                 hours.push(date);
                             }
-                            
+
                             // Use current productivity score for all hours as placeholder
                             const insights = await browsingAnalytics.getTodayInsights();
                             trendData = {
                                 dates: hours.map(d => d.toISOString()),
                                 scores: hours.map(() => insights.productivityScore)
                             };
-                        } 
+                        }
                         // For week, get daily trend
                         else if (period === 'week') {
                             const now = new Date();
                             const startOfWeek = new Date(now);
                             startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
                             startOfWeek.setHours(0, 0, 0, 0);
-                            
+
                             const days = [];
                             for (let i = 0; i <= 6; i++) {
                                 const date = new Date(startOfWeek);
@@ -1143,7 +1458,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                     days.push(date);
                                 }
                             }
-                            
+
                             // Use current weekly insights for all days as placeholder
                             const insights = await browsingAnalytics.getWeekInsights();
                             trendData = {
@@ -1155,7 +1470,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                         else if (period === 'month') {
                             const now = new Date();
                             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                            
+
                             // Create a weekly trend
                             const weeks = [];
                             let currentWeekStart = new Date(startOfMonth);
@@ -1163,10 +1478,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                                 weeks.push(new Date(currentWeekStart));
                                 currentWeekStart.setDate(currentWeekStart.getDate() + 7);
                             }
-                            
+
                             // Use monthly insights for all weeks as placeholder
                             const insights = await browsingAnalytics.getDateRangeInsights(
-                                startOfMonth, 
+                                startOfMonth,
                                 new Date(now.getFullYear(), now.getMonth() + 1, 0)
                             );
                             trendData = {

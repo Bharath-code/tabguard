@@ -96,21 +96,21 @@
     - _Requirements: 5.2, 5.4_
 
 - [ ] 6. Implement subscription and premium features
-  - [ ] 6.1 Create subscription management foundation
+  - [x] 6.1 Create subscription management foundation
     - Build SubscriptionManager class with plan validation
     - Implement feature flag system for premium capabilities
     - Create free tier limitations (5 tab limit, basic features)
     - Add subscription state persistence and validation
     - _Requirements: 8.1, 8.2_
 
-  - [ ] 6.2 Integrate Stripe payment processing
-    - Set up Stripe SDK integration for subscription payments
+  - [x] 6.2 Integrate Stripe payment processing
+    - Set up [DoDo](https://docs.dodopayments.com/welcome) SDK integration for subscription payments
     - Implement subscription creation and management flows
     - Build payment success/failure handling
     - Create subscription upgrade/downgrade mechanisms
     - _Requirements: 8.3, 8.4_
 
-  - [ ] 6.3 Build premium feature unlocking system
+  - [x] 6.3 Build premium feature unlocking system
     - Implement conditional UI rendering based on subscription status
     - Create premium feature access validation
     - Build upgrade prompts and conversion flows

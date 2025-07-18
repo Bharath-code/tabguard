@@ -1,0 +1,115 @@
+                // DoDo Payment Integration message handlers
+                case 'createCheckoutSession':
+                    try {
+                        if (message.planId) {
+                            const checkoutSession = await subscriptionManager.createCheckoutSession(
+                                message.planId,
+                                message.customerEmail
+                            );
+                            
+                            if (checkoutSession) {
+                                sendResponse({ success: true, checkoutSession });
+                            } else {
+                                sendResponse({ success: false, error: 'Failed to create checkout session' });
+                            }
+                        } else {
+                            sendResponse({ success: false, error: 'No plan ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error creating checkout session:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'processPaymentSuccess':
+                    try {
+                        if (message.sessionId) {
+                            const success = await subscriptionManager.processPaymentSuccess(message.sessionId);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No session ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error processing payment success:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'processPaymentFailure':
+                    try {
+                        if (message.sessionId) {
+                            await subscriptionManager.processPaymentFailure(message.sessionId, message.errorCode);
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'No session ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error processing payment failure:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'cancelSubscription':
+                    try {
+                        const cancelImmediately = message.cancelImmediately === true;
+                        const success = await subscriptionManager.cancelSubscription(cancelImmediately);
+                        sendResponse({ success });
+                    } catch (error) {
+                        console.error('Error cancelling subscription:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'changeSubscriptionPlan':
+                    try {
+                        if (message.planId) {
+                            const success = await subscriptionManager.changeSubscriptionPlan(message.planId);
+                            sendResponse({ success });
+                        } else {
+                            sendResponse({ success: false, error: 'No plan ID provided' });
+                        }
+                    } catch (error) {
+                        console.error('Error changing subscription plan:', error);
+                        sendResponse({ success: false, error: String(error) });
+                    }
+                    break;
+
+                case 'hasActiveSubscription':
+                    try {
+                        const hasSubscription = await subscriptionManager.hasActiveSubscription();
+                        sendResponse({ hasSubscription });
+                    } catch (error) {
+                        console.error('Error checking active subscription:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getSubscriptionState':
+                    try {
+                        const state = subscriptionManager.getSubscriptionState();
+                        sendResponse({ state });
+                    } catch (error) {
+                        console.error('Error getting subscription state:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getAvailablePlans':
+                    try {
+                        const plans = subscriptionManager.getAvailablePlans();
+                        sendResponse({ plans });
+                    } catch (error) {
+                        console.error('Error getting available plans:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;
+
+                case 'getAvailableFeatures':
+                    try {
+                        const features = await subscriptionManager.getAvailableFeatures();
+                        sendResponse({ features });
+                    } catch (error) {
+                        console.error('Error getting available features:', error);
+                        sendResponse({ error: String(error) });
+                    }
+                    break;

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ScheduledFocusSession, 
-  TimeBasedRuleSchedule, 
-  FocusModeSettings 
+import {
+  ScheduledFocusSession,
+  TimeBasedRuleSchedule,
+  FocusModeSettings
 } from '../../background/FocusModeManager';
 
 interface FocusSchedulerProps {
@@ -16,12 +16,12 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   const [availableRules, setAvailableRules] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // State for editing
   const [editingSession, setEditingSession] = useState<ScheduledFocusSession | null>(null);
   const [editingRule, setEditingRule] = useState<TimeBasedRuleSchedule | null>(null);
   const [activeTab, setActiveTab] = useState<'sessions' | 'rules'>('sessions');
-  
+
   // Days of week for selection
   const daysOfWeek = [
     { id: 0, name: 'Sunday' },
@@ -42,28 +42,28 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       // Load scheduled focus sessions
       const sessionsResponse = await chrome.runtime.sendMessage({ action: 'getScheduledSessions' });
       if (sessionsResponse.sessions) {
         setFocusSessions(sessionsResponse.sessions);
       }
-      
+
       // Load time-based rules
       const rulesResponse = await chrome.runtime.sendMessage({ action: 'getTimeBasedRules' });
       if (rulesResponse.rules) {
         setTimeRules(rulesResponse.rules);
       }
-      
+
       // Load available rules for time-based rules
       const allRulesResponse = await chrome.runtime.sendMessage({ action: 'getRules' });
       if (allRulesResponse.rules) {
-        setAvailableRules(allRulesResponse.rules.map((rule: any) => ({ 
-          id: rule.id, 
-          name: rule.name 
+        setAvailableRules(allRulesResponse.rules.map((rule: any) => ({
+          id: rule.id,
+          name: rule.name
         })));
       }
-      
+
       setLoading(false);
     } catch (err) {
       console.error('Error loading scheduler data:', err);
@@ -85,7 +85,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           enabled: true,
           settings: response.settings
         };
-        
+
         setEditingSession(newSession as ScheduledFocusSession);
       }
     });
@@ -101,7 +101,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
       daysOfWeek: [1, 2, 3, 4, 5], // Monday to Friday
       enabled: true
     };
-    
+
     setEditingRule(newRule as TimeBasedRuleSchedule);
   };
 
@@ -109,7 +109,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   const saveSession = async () => {
     try {
       if (!editingSession) return;
-      
+
       if (editingSession.id) {
         // Update existing session
         const response = await chrome.runtime.sendMessage({
@@ -117,10 +117,10 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           id: editingSession.id,
           updates: editingSession
         });
-        
+
         if (response.success) {
-          setFocusSessions(prev => 
-            prev.map(session => 
+          setFocusSessions(prev =>
+            prev.map(session =>
               session.id === editingSession.id ? editingSession : session
             )
           );
@@ -134,7 +134,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           action: 'addScheduledSession',
           session: editingSession
         });
-        
+
         if (response.success && response.id) {
           const newSession = { ...editingSession, id: response.id };
           setFocusSessions(prev => [...prev, newSession]);
@@ -153,7 +153,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   const saveTimeRule = async () => {
     try {
       if (!editingRule) return;
-      
+
       if (editingRule.id) {
         // Update existing rule
         const response = await chrome.runtime.sendMessage({
@@ -161,10 +161,10 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           id: editingRule.id,
           updates: editingRule
         });
-        
+
         if (response.success) {
-          setTimeRules(prev => 
-            prev.map(rule => 
+          setTimeRules(prev =>
+            prev.map(rule =>
               rule.id === editingRule.id ? editingRule : rule
             )
           );
@@ -178,7 +178,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           action: 'addTimeBasedRule',
           rule: editingRule
         });
-        
+
         if (response.success && response.id) {
           const newRule = { ...editingRule, id: response.id };
           setTimeRules(prev => [...prev, newRule]);
@@ -200,7 +200,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
         action: 'deleteScheduledSession',
         id
       });
-      
+
       if (response.success) {
         setFocusSessions(prev => prev.filter(session => session.id !== id));
       } else {
@@ -219,7 +219,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
         action: 'deleteTimeBasedRule',
         id
       });
-      
+
       if (response.success) {
         setTimeRules(prev => prev.filter(rule => rule.id !== id));
       } else {
@@ -239,10 +239,10 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
         id: session.id,
         updates: { enabled: !session.enabled }
       });
-      
+
       if (response.success) {
-        setFocusSessions(prev => 
-          prev.map(s => 
+        setFocusSessions(prev =>
+          prev.map(s =>
             s.id === session.id ? { ...s, enabled: !s.enabled } : s
           )
         );
@@ -263,10 +263,10 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
         id: rule.id,
         updates: { enabled: !rule.enabled }
       });
-      
+
       if (response.success) {
-        setTimeRules(prev => 
-          prev.map(r => 
+        setTimeRules(prev =>
+          prev.map(r =>
             r.id === rule.id ? { ...r, enabled: !r.enabled } : r
           )
         );
@@ -283,10 +283,10 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   const formatTime = (timeString: string) => {
     try {
       const [hours, minutes] = timeString.split(':').map(Number);
-      return new Date(0, 0, 0, hours, minutes).toLocaleTimeString([], { 
-        hour: 'numeric', 
+      return new Date(0, 0, 0, hours, minutes).toLocaleTimeString([], {
+        hour: 'numeric',
         minute: '2-digit',
-        hour12: true 
+        hour12: true
       });
     } catch (err) {
       return timeString;
@@ -298,7 +298,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
     if (days.length === 7) return 'Every day';
     if (days.length === 5 && [1, 2, 3, 4, 5].every(d => days.includes(d))) return 'Weekdays';
     if (days.length === 2 && [0, 6].every(d => days.includes(d))) return 'Weekends';
-    
+
     return days
       .map(d => daysOfWeek.find(day => day.id === d)?.name.substring(0, 3))
       .join(', ');
@@ -319,48 +319,48 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   // Toggle day selection for session
   const toggleSessionDay = (dayId: number) => {
     if (!editingSession) return;
-    
+
     const currentDays = editingSession.daysOfWeek || [];
     const newDays = currentDays.includes(dayId)
       ? currentDays.filter(d => d !== dayId)
       : [...currentDays, dayId];
-    
+
     updateSessionField('daysOfWeek', newDays);
   };
 
   // Toggle day selection for rule
   const toggleRuleDay = (dayId: number) => {
     if (!editingRule) return;
-    
+
     const currentDays = editingRule.daysOfWeek || [];
     const newDays = currentDays.includes(dayId)
       ? currentDays.filter(d => d !== dayId)
       : [...currentDays, dayId];
-    
+
     updateRuleField('daysOfWeek', newDays);
   };
 
   // Toggle rule selection
   const toggleRuleSelection = (ruleId: string) => {
     if (!editingRule) return;
-    
+
     const currentRules = editingRule.ruleIds || [];
     const newRules = currentRules.includes(ruleId)
       ? currentRules.filter(id => id !== ruleId)
       : [...currentRules, ruleId];
-    
+
     updateRuleField('ruleIds', newRules);
   };
 
   // Update focus mode settings
   const updateFocusModeSettings = (field: keyof FocusModeSettings, value: any) => {
     if (!editingSession || !editingSession.settings) return;
-    
+
     const updatedSettings = {
       ...editingSession.settings,
       [field]: value
     };
-    
+
     updateSessionField('settings', updatedSettings);
   };
 
@@ -371,7 +371,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   // Render session editor
   const renderSessionEditor = () => {
     if (!editingSession) return null;
-    
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -379,7 +379,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
               {editingSession.id ? 'Edit Focus Session' : 'New Focus Session'}
             </h3>
-            <button 
+            <button
               onClick={() => setEditingSession(null)}
               className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             >
@@ -388,7 +388,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
               </svg>
             </button>
           </div>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -401,7 +401,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -414,7 +414,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   End Time
@@ -427,7 +427,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 />
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Days of Week
@@ -437,18 +437,17 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                   <button
                     key={day.id}
                     onClick={() => toggleSessionDay(day.id)}
-                    className={`px-3 py-1 text-sm rounded-full ${
-                      editingSession.daysOfWeek?.includes(day.id)
+                    className={`px-3 py-1 text-sm rounded-full ${editingSession.daysOfWeek?.includes(day.id)
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                    }`}
+                      }`}
                   >
                     {day.name.substring(0, 3)}
                   </button>
                 ))}
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Tab Limit During Focus
@@ -462,7 +461,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
-            
+
             <div className="flex items-center">
               <input
                 id="block-distractions"
@@ -475,7 +474,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 Block distracting sites during focus
               </label>
             </div>
-            
+
             <div className="flex items-center">
               <input
                 id="session-enabled"
@@ -488,7 +487,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 Enable this scheduled session
               </label>
             </div>
-            
+
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setEditingSession(null)}
@@ -512,7 +511,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
   // Render rule editor
   const renderRuleEditor = () => {
     if (!editingRule) return null;
-    
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -520,7 +519,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
               {editingRule.id ? 'Edit Time-Based Rule' : 'New Time-Based Rule'}
             </h3>
-            <button 
+            <button
               onClick={() => setEditingRule(null)}
               className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             >
@@ -529,7 +528,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
               </svg>
             </button>
           </div>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -542,7 +541,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -555,7 +554,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   End Time
@@ -568,7 +567,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 />
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Days of Week
@@ -578,18 +577,17 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                   <button
                     key={day.id}
                     onClick={() => toggleRuleDay(day.id)}
-                    className={`px-3 py-1 text-sm rounded-full ${
-                      editingRule.daysOfWeek?.includes(day.id)
+                    className={`px-3 py-1 text-sm rounded-full ${editingRule.daysOfWeek?.includes(day.id)
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                    }`}
+                      }`}
                   >
                     {day.name.substring(0, 3)}
                   </button>
                 ))}
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Rules to Activate
@@ -617,7 +615,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 )}
               </div>
             </div>
-            
+
             <div className="flex items-center">
               <input
                 id="rule-enabled"
@@ -630,7 +628,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
                 Enable this time-based rule
               </label>
             </div>
-            
+
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setEditingRule(null)}
@@ -656,7 +654,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Focus & Time Scheduler</h2>
         {onClose && (
-          <button 
+          <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
           >
@@ -666,11 +664,11 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           </button>
         )}
       </div>
-      
+
       {error && (
         <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-md text-sm">
           {error}
-          <button 
+          <button
             className="ml-2 text-red-500 hover:text-red-700"
             onClick={() => setError(null)}
           >
@@ -678,34 +676,32 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           </button>
         </div>
       )}
-      
+
       <div className="mb-4">
         <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="-mb-px flex">
             <button
               onClick={() => setActiveTab('sessions')}
-              className={`py-2 px-4 text-sm font-medium ${
-                activeTab === 'sessions'
+              className={`py-2 px-4 text-sm font-medium ${activeTab === 'sessions'
                   ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+                }`}
             >
               Focus Sessions
             </button>
             <button
               onClick={() => setActiveTab('rules')}
-              className={`ml-8 py-2 px-4 text-sm font-medium ${
-                activeTab === 'rules'
+              className={`ml-8 py-2 px-4 text-sm font-medium ${activeTab === 'rules'
                   ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+                }`}
             >
               Time-Based Rules
             </button>
           </nav>
         </div>
       </div>
-      
+
       {activeTab === 'sessions' ? (
         <div>
           <div className="mb-4 flex justify-between items-center">
@@ -717,7 +713,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
               Add Session
             </button>
           </div>
-          
+
           {focusSessions.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400 text-center py-4">
               No focus sessions scheduled. Create one to get started.
@@ -725,29 +721,26 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           ) : (
             <div className="space-y-3">
               {focusSessions.map(session => (
-                <div 
-                  key={session.id} 
-                  className={`border ${
-                    session.enabled 
-                      ? 'border-green-200 dark:border-green-900' 
+                <div
+                  key={session.id}
+                  className={`border ${session.enabled
+                      ? 'border-green-200 dark:border-green-900'
                       : 'border-gray-200 dark:border-gray-700'
-                  } rounded-lg p-3`}
+                    } rounded-lg p-3`}
                 >
                   <div className="flex justify-between items-center">
                     <div className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full mr-2 ${
-                        session.enabled ? 'bg-green-500' : 'bg-gray-400'
-                      }`}></div>
+                      <div className={`w-3 h-3 rounded-full mr-2 ${session.enabled ? 'bg-green-500' : 'bg-gray-400'
+                        }`}></div>
                       <h4 className="font-medium text-gray-800 dark:text-white">{session.name}</h4>
                     </div>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => toggleSessionEnabled(session)}
-                        className={`px-2 py-1 rounded text-xs ${
-                          session.enabled
+                        className={`px-2 py-1 rounded text-xs ${session.enabled
                             ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                             : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                        }`}
+                          }`}
                       >
                         {session.enabled ? 'Enabled' : 'Disabled'}
                       </button>
@@ -797,7 +790,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
               Add Rule
             </button>
           </div>
-          
+
           {timeRules.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400 text-center py-4">
               No time-based rules created. Create one to get started.
@@ -805,29 +798,26 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           ) : (
             <div className="space-y-3">
               {timeRules.map(rule => (
-                <div 
-                  key={rule.id} 
-                  className={`border ${
-                    rule.enabled 
-                      ? 'border-blue-200 dark:border-blue-900' 
+                <div
+                  key={rule.id}
+                  className={`border ${rule.enabled
+                      ? 'border-blue-200 dark:border-blue-900'
                       : 'border-gray-200 dark:border-gray-700'
-                  } rounded-lg p-3`}
+                    } rounded-lg p-3`}
                 >
                   <div className="flex justify-between items-center">
                     <div className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full mr-2 ${
-                        rule.enabled ? 'bg-blue-500' : 'bg-gray-400'
-                      }`}></div>
+                      <div className={`w-3 h-3 rounded-full mr-2 ${rule.enabled ? 'bg-blue-500' : 'bg-gray-400'
+                        }`}></div>
                       <h4 className="font-medium text-gray-800 dark:text-white">{rule.name}</h4>
                     </div>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => toggleRuleEnabled(rule)}
-                        className={`px-2 py-1 rounded text-xs ${
-                          rule.enabled
+                        className={`px-2 py-1 rounded text-xs ${rule.enabled
                             ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                             : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                        }`}
+                          }`}
                       >
                         {rule.enabled ? 'Enabled' : 'Disabled'}
                       </button>
@@ -866,7 +856,7 @@ const FocusScheduler: React.FC<FocusSchedulerProps> = ({ onClose }) => {
           )}
         </div>
       )}
-      
+
       {renderSessionEditor()}
       {renderRuleEditor()}
     </div>
